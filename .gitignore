@@ -27,3 +27,21 @@ docs/versions.html
 # Other output files.
 *.csv
 *.kml
+
+# Mac artifacts
+.DS_Store
+**/.DS_Store
+
+# ROS2 build folders.
+**/build/**
+**/install/**
+**/build_isolated/**
+**/install_isolated/**
+**/devel/**
+*cmake-build*
+
+# Log directories.
+**/log/**
+**/logs/**
+**/log_folder/**
+
