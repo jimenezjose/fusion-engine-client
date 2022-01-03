@@ -5,7 +5,7 @@
  * @breif Atlas message type definitions.
  */
 enum class AtlasMessageType {
-  /** Standard GPSFix message. 
+  /** Standard ROS GPSFix message. 
    *  @see http://docs.ros.org/api/gps_common/html/msg/GPSFix.html
    * */
   GPS_FIX = 0,

@@ -3,7 +3,7 @@
 
 #include "gps_msgs/msg/gps_fix.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-#include "atlas_driver/atlas_message_type.hpp"
+#include "atlas_driver/common/atlas_message_type.hpp"
 
 /**
  * Data class that wraps message data in a generic object.

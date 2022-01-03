@@ -1,5 +1,5 @@
-#ifndef ATLAS_BYTE_FRAME_EVENT
-#define ATLAS_BYTE_FRAME_EVENT
+#ifndef ATLAS_BYTE_FRAME_EVENT_HPP
+#define ATLAS_BYTE_FRAME_EVENT_HPP
 
 #include <cstring>
 #include <arpa/inet.h>

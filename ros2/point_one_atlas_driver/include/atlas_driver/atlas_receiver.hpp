@@ -1,5 +1,5 @@
-#ifndef ATLAS_MESSAGE_DECODER_HPP
-#define ATLAS_MESSAGE_DECODER_HPP
+#ifndef ATLAS_RECEIVER_HPP
+#define ATLAS_RECEIVER_HPP
 
 #include <cerrno>
 #include <cmath> // For lround()
@@ -7,19 +7,16 @@
 #include <cstdio> // For fprintf()
 #include <cstring> // For memcpy()
 #include <string> // For stoi() and strerror()
-
 #include <netdb.h> // For gethostbyname() and hostent
 #include <netinet/in.h> // For IPPROTO_* macros and htons()
 #include <sys/socket.h> // For socket support.
 #include <unistd.h> // For close()
-
 #include <vector>
 #include <arpa/inet.h>
 
-
 #include "rclcpp/rclcpp.hpp"
-#include "atlas_driver/interface/atlas_byte_frame_listener.hpp"
-#include "atlas_driver/interface/atlas_byte_frame_event.hpp"
+#include "atlas_driver/interfaces/atlas_byte_frame_listener.hpp"
+#include "atlas_driver/interfaces/atlas_byte_frame_event.hpp"
 
 #define ATLAS_UDP_PORT 12345
 
@@ -28,16 +25,15 @@
  * listeners attached to this singleton object once a raw data packet 
  * been receieved.
  */
-class AtlasMessageDecoder {
-  // AtlasReceiver
+class AtlasReceiver {
 public:
 
   /**
    * Singleton object. Only one message parser is necessary.
-   * @return static reference to single AtlasMessageDecoder instance.
+   * @return static reference to single AtlasReceiver instance.
    */
-  static AtlasMessageDecoder & getInstance() {
-    static AtlasMessageDecoder instance; // static method field instatiated once
+  static AtlasReceiver & getInstance() {
+    static AtlasReceiver instance; // static method field instatiated once
     return instance;
   }
 
@@ -107,7 +103,21 @@ private:
   rclcpp::Node * node_;
 
   /* private constructor for singleton design */
-  AtlasMessageDecoder() : port(ATLAS_UDP_PORT) {}
+  AtlasReceiver() : port(ATLAS_UDP_PORT) {}
+
+  /**
+   * Notifies all AtlasByteFrameListeners of a newly recieved byte frame.
+   * @param frame Raw byte frame received.
+   * @param bytes_read Size of byte frame.
+   * @param frame_ip Frame source ip.
+   * @return Nothing.
+   */
+  void fireAtlasByteFrameEvent(uint8_t * frame, size_t bytes_read, char frame_ip[INET6_ADDRSTRLEN]) {
+    AtlasByteFrameEvent evt(frame, bytes_read, frame_ip);
+    for(AtlasByteFrameListener * listener : listenerList) {
+      listener->receivedAtlasByteFrame(evt);
+    }
+  }
 
   /**
    * Creates and binds to a UDP network socket.
@@ -144,20 +154,6 @@ private:
         return &(((struct sockaddr_in *)sa)->sin_addr);
     }
     return &(((struct sockaddr_in6 *)sa)->sin6_addr);
-  }
-
-  /**
-   * Notifies all AtlasByteFrameListeners of a newly recieved byte frame.
-   * @param frame Raw byte frame received.
-   * @param bytes_read Size of byte frame.
-   * @param frame_ip Frame source ip.
-   * @return Nothing.
-   */
-  void fireAtlasByteFrameEvent(uint8_t * frame, size_t bytes_read, char frame_ip[INET6_ADDRSTRLEN]) {
-    AtlasByteFrameEvent evt(frame, bytes_read, frame_ip);
-    for(AtlasByteFrameListener * listener : listenerList) {
-      listener->receivedAtlasByteFrame(evt);
-    }
   }
 };
 

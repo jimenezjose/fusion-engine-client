@@ -1,7 +1,7 @@
 #ifndef ATLAS_MESSAGE_LISTENER_HPP
 #define ATLAS_MESSAGE_LISTENER_HPP
 
-#include "atlas_driver/interface/atlas_message_event.hpp"
+#include "atlas_driver/interfaces/atlas_message_event.hpp"
 
 /**
  * Abstract interfaces for clients listening for asynchronous data from Atlas.
