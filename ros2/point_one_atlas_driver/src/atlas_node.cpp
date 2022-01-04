@@ -32,26 +32,11 @@ public:
    * @return Nothing.
    */
   void receivedAtlasMessage(AtlasMessageEvent & evt) {
-    std_msgs::msg::String message;
     if(evt.message_type == AtlasMessageType::GPS_FIX) {
-      message.data = 
-          "Position (LLA): " 
-          + std::to_string(evt.gps_fix.latitude) + ", " 
-          + std::to_string(evt.gps_fix.longitude) + ", " 
-          + std::to_string(evt.gps_fix.altitude)
-          + " (deg, deg, m)";
       gps_fix_publisher_->publish(evt.gps_fix);
-      RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
     }
     else if(evt.message_type == AtlasMessageType::IMU) {
-      message.data = 
-          "Angular velocity (x, y, z): ("
-          + std::to_string(evt.imu.angular_velocity.x) + ","
-          + std::to_string(evt.imu.angular_velocity.y) + ","
-          + std::to_string(evt.imu.angular_velocity.z) + ","
-          + ")";
       imu_publisher_->publish(evt.imu);
-      RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
     }
   }
 
