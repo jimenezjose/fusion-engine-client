@@ -9,6 +9,7 @@ import os
 import sys
 import webbrowser
 
+from gpstime import gpstime
 import plotly
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
@@ -32,6 +33,7 @@ _logger = logging.getLogger('point_one.fusion_engine.analysis.analyzer')
 SolutionTypeInfo = namedtuple('SolutionTypeInfo', ['name', 'style'])
 
 _SOLUTION_TYPE_MAP = {
+    SolutionType.Invalid: SolutionTypeInfo(name='Invalid', style={'color': 'black'}),
     SolutionType.Integrate: SolutionTypeInfo(name='Integrated', style={'color': 'cyan'}),
     SolutionType.AutonomousGPS: SolutionTypeInfo(name='Standalone', style={'color': 'red'}),
     SolutionType.DGPS: SolutionTypeInfo(name='DGPS', style={'color': 'blue'}),
@@ -47,11 +49,17 @@ def _data_to_table(col_titles: List[str], col_values: List[List[Any]]):
     for title in col_titles:
         table_html += f'<th>{title}</th>'
     table_html += '</tr>'
-    length = min([len(l) for l in col_values])
-    for i in range(length):
+    num_rows = min([len(l) for l in col_values])
+    for row_idx in range(num_rows):
         table_html += '<tr>'
-        for l in col_values:
-            table_html += f'<td>{l[i]}</td>'
+
+        separator_row = col_values[0][row_idx] is None
+        for col_data in col_values:
+            if separator_row:
+                table_html += '<td><hr></td>'
+            else:
+                table_html += f'<td>{col_data[row_idx]}</td>'
+
         table_html += '</tr>'
     table_html += '</table>'
     return table_html
@@ -119,6 +127,84 @@ class Analyzer(object):
         if self.output_dir is not None:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
+
+    def plot_time_scale(self):
+        if self.output_dir is None:
+            return
+
+        figure = go.Figure()
+        figure['layout'].update(title='Device Time vs Relative Time', showlegend=False)
+        figure['layout']['xaxis1'].update(title="Relative Time (sec)")
+        figure['layout']['yaxis1'].update(title="Absolute Time",
+                                          ticktext=['P1/GPS Time', 'System Time'],
+                                          tickvals=[1, 2])
+
+        # Read the pose data to get P1 and GPS timestamps.
+        result = self.reader.read(message_types=[PoseMessage], **self.params)
+        pose_data = result[PoseMessage.MESSAGE_TYPE]
+
+        if len(pose_data.p1_time) > 0:
+            time = pose_data.p1_time - float(self.t0)
+
+            # plotly starts to struggle with > 2 hours of data and won't display mouseover text, so decimate if
+            # necessary.
+            dt_sec = time[-1] - time[0]
+            if dt_sec > 7200.0:
+                step = math.ceil(dt_sec / 7200.0)
+                idx = np.full_like(time, False, dtype=bool)
+                idx[0::step] = True
+
+                time = time[idx]
+                p1_time = pose_data.p1_time[idx]
+                gps_time = pose_data.gps_time[idx]
+
+                figure['layout'].update(title=figure.layout.title.text + "<br>Decimated %dx" % step)
+            else:
+                p1_time = pose_data.p1_time
+                gps_time = pose_data.gps_time
+
+            def gps_sec_to_string(gps_time_sec):
+                if np.isnan(gps_time_sec):
+                    return "GPS: N/A<br>UTC: N/A"
+                else:
+                    SECS_PER_WEEK = 7 * 24 * 3600.0
+                    week = int(gps_time_sec / SECS_PER_WEEK)
+                    tow_sec = gps_time_sec - week * SECS_PER_WEEK
+                    utc_time = gpstime.fromgps(gps_time_sec)
+                    return "GPS: %d:%.3f (%.3f sec)<br>UTC: %s" %\
+                           (week, tow_sec, gps_time_sec, utc_time.strftime('%Y-%m-%d %H:%M:%S %Z'))
+
+            text = ['P1: %.3f sec<br>%s' % (p, gps_sec_to_string(g)) for p, g in zip(p1_time, gps_time)]
+            figure.add_trace(go.Scattergl(x=time, y=np.full_like(time, 1), name='P1/GPS Time', text=text,
+                                          mode='markers'))
+
+        # Read system timestamps from event notifications, if present.
+        result = self.reader.read(message_types=[EventNotificationMessage], **self.params)
+        event_data = result[EventNotificationMessage.MESSAGE_TYPE]
+
+        system_time_sec = None
+        if len(event_data.messages) > 0:
+            system_time_sec = np.array([(m.system_time_ns * 1e-9) for m in event_data.messages])
+
+        if system_time_sec is not None:
+            time = system_time_sec - self.system_t0
+
+            # plotly starts to struggle with > 2 hours of data and won't display mouseover text, so decimate if
+            # necessary.
+            dt_sec = time[-1] - time[0]
+            if dt_sec > 7200.0:
+                step = math.ceil(dt_sec / 7200.0)
+                idx = np.full_like(time, False, dtype=bool)
+                idx[0::step] = True
+
+                time = time[idx]
+                system_time_sec = system_time_sec[idx]
+
+            text = ['System: %.3f sec' % t for t in system_time_sec]
+            figure.add_trace(go.Scattergl(x=time, y=np.full_like(time, 2), name='System Time', text=text,
+                                          mode='markers'))
+
+        self._add_figure(name="time_scale", figure=figure, title="Time Scale")
 
     def plot_pose(self):
         """!
@@ -228,7 +314,7 @@ class Analyzer(object):
                                       showlegend=False, mode='lines', line={'color': 'blue'}),
                          2, 3)
 
-        self._add_figure(name="pose", figure=figure, title="Vehicle Pose")
+        self._add_figure(name="pose", figure=figure, title="Vehicle Pose vs. Time")
 
     def plot_solution_type(self):
         """!
@@ -256,7 +342,7 @@ class Analyzer(object):
         time = pose_data.p1_time - float(self.t0)
 
         text = ["Time: %.3f sec (%.3f sec)" % (t, t + float(self.t0)) for t in time]
-        figure.add_trace(go.Scattergl(x=time, y=pose_data.solution_type, text=text), 1, 1)
+        figure.add_trace(go.Scattergl(x=time, y=pose_data.solution_type, text=text, mode='markers'), 1, 1)
 
         self._add_figure(name="solution_type", figure=figure, title="Solution Type")
 
@@ -269,7 +355,7 @@ class Analyzer(object):
 
         mapbox_token = self.get_mapbox_token(mapbox_token)
         if mapbox_token is None:
-            self.logger.info('Mapbox token not specified. Skipping map display.')
+            self.logger.info('*' * 80 + '\n\nMapbox token not specified. Skipping map display.\n\n' + '*' * 80)
             return
 
         # Read the pose data.
@@ -421,8 +507,7 @@ class Analyzer(object):
         @param auto_open If `True`, open the page automatically in a web browser.
         """
         if len(self.plots) == 0:
-            self.logger.warning('No plots generated. Skipping index generation.')
-            return
+            self.logger.warning('No plots generated. Index will contain summary only.')
 
         self._set_data_summary()
 
@@ -450,9 +535,10 @@ class Analyzer(object):
 
     def _set_data_summary(self):
         # Generate an index file, which we need to calculate the log duration, in case it wasn't created earlier (i.e.,
-        # we didn't read anything to plot.
+        # we didn't read anything to plot).
         self.reader.generate_index()
 
+        # Calculate the log duration.
         idx = ~np.isnan(self.reader.index['time'])
         time = self.reader.index['time'][idx]
         if len(time) >= 2:
@@ -460,25 +546,46 @@ class Analyzer(object):
         else:
             duration_sec = np.nan
 
-        if self.summary != '':
-            self.summary += '\n\n'
+        # Create a table with position solution type statistics.
+        result = self.reader.read(message_types=[PoseMessage], **self.params)
+        pose_data = result[PoseMessage.MESSAGE_TYPE]
+        num_pose_messages = len(pose_data.solution_type)
+        solution_type_count = {}
+        for type, info in _SOLUTION_TYPE_MAP.items():
+            solution_type_count[info.name] = np.sum(pose_data.solution_type == type)
 
+        types = list(solution_type_count.keys())
+        counts = ['%d' % c for c in solution_type_count.values()]
+        percents = ['%.1f%%' % (float(c) / num_pose_messages * 100.0) for c in solution_type_count.values()]
+
+        types.append(None)
+        counts.append(None)
+        percents.append(None)
+
+        types.append('Total')
+        counts.append('%d' % num_pose_messages)
+        percents.append('')
+
+        types.append('Log Duration')
+        counts.append('%.1f seconds' % duration_sec)
+        percents.append('')
+
+        solution_type_table = _data_to_table(['Position Type', 'Count', 'Percent'], [types, counts, percents])
+
+        # Create a table with the types and counts of each FusionEngine message type in the log.
         message_types, message_counts = np.unique(self.reader.index['type'], return_counts=True)
         message_types = [MessageType.get_type_string(t) for t in message_types]
-        message_table = _data_to_table(['Message Type', 'Count'], [message_types, message_counts])
-        message_table = message_table.replace('</table>', f'''
-  <tr>
-    <td><hr></td>
-    <td><hr></td>
-  </tr>
-  <tr>
-    <td>Total</td>
-    <td>{len(self.reader.index)}</td>
-  </tr>
-</table>
-''')
-        message_table = message_table.replace('\n', '')
 
+        message_counts = message_counts.tolist()
+        message_types.append(None)
+        message_counts.append(None)
+
+        message_types.append('Total')
+        message_counts.append(f'{len(self.reader.index)}')
+
+        message_table = _data_to_table(['Message Type', 'Count'], [message_types, message_counts])
+
+        # Create a software version table.
         result = self.reader.read(message_types=[VersionInfoMessage.MESSAGE_TYPE], remove_nan_times=False,
                                   **self.params)
         if len(result[VersionInfoMessage.MESSAGE_TYPE].messages) != 0:
@@ -490,16 +597,21 @@ class Analyzer(object):
         else:
             version_table = 'No version information.'
 
+        # Now populate the summary.
+        if self.summary != '':
+            self.summary += '\n\n'
+
         args = {
             'duration_sec': duration_sec,
             'message_table': message_table,
             'version_table': version_table,
+            'solution_type_table': solution_type_table,
         }
 
         self.summary += """
-Duration: %(duration_sec).1f seconds
-
 %(version_table)s
+
+%(solution_type_table)s
 
 %(message_table)s
 """ % args
@@ -665,6 +777,7 @@ Load and display information stored in a FusionEngine binary file.
                         prefix=options.prefix + '.' if options.prefix is not None else '',
                         time_range=time_range, absolute_time=options.absolute_time)
 
+    analyzer.plot_time_scale()
     analyzer.plot_solution_type()
     analyzer.plot_pose()
     analyzer.plot_map(mapbox_token=options.mapbox_token)
