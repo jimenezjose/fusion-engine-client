@@ -3,6 +3,7 @@ from enum import IntEnum
 import logging
 import math
 import struct
+from typing import Union
 from zlib import crc32
 
 import numpy as np
@@ -11,7 +12,7 @@ _logger = logging.getLogger('point_one.fusion_engine.messages.defs')
 
 
 class SatelliteType(IntEnum):
-    UNKNOWN = 1
+    UNKNOWN = 0
     GPS = 1
     GLONASS = 2
     LEO = 3
@@ -74,6 +75,7 @@ class MessageType(IntEnum):
     GNSS_INFO = 10001
     GNSS_SATELLITE = 10002
     POSE_AUX = 10003
+    CALIBRATION_STATUS = 10004
 
     # Sensor measurement messages.
     IMU_MEASUREMENT = 11000
@@ -171,22 +173,22 @@ class Timestamp:
         return Timestamp._SIZE
 
     def __eq__(self, other):
-        return self.seconds == other.seconds
+        return self.seconds == float(other)
 
     def __ne__(self, other):
-        return self.seconds != other.seconds
+        return self.seconds != float(other)
 
     def __lt__(self, other):
-        return self.seconds < other.seconds
+        return self.seconds < float(other)
 
     def __le__(self, other):
-        return self.seconds <= other.seconds
+        return self.seconds <= float(other)
 
     def __gt__(self, other):
-        return self.seconds > other.seconds
+        return self.seconds > float(other)
 
     def __ge__(self, other):
-        return self.seconds >= other.seconds
+        return self.seconds >= float(other)
 
     def __bool__(self):
         return not math.isnan(self.seconds)
@@ -195,7 +197,16 @@ class Timestamp:
         return self.seconds
 
     def __str__(self):
-        return '%.3f seconds' % self.seconds
+        return 'P1 time %.3f sec' % self.seconds
+
+
+def system_time_to_str(system_time_ns):
+    system_time_sec = system_time_ns * 1e-9
+    if system_time_sec >= 946684800: # 2000/1/1 00:00:00
+        return 'POSIX time %s (%.3f sec)' % \
+               (datetime.utcfromtimestamp(system_time_sec).replace(tzinfo=timezone.utc), system_time_sec)
+    else:
+        return 'System time %.3f sec' % system_time_sec
 
 
 class MessageHeader:
@@ -343,24 +354,6 @@ class MessageHeader:
         """
         return MessageHeader._SIZE
 
-    @classmethod
-    def unpack_values(cls, format, buffer, offset=0, *args):
-        values = struct.unpack_from(format, buffer, offset)
-
-        args = list(args)
-        value_idx = 0
-        for arg_idx in range(len(args)):
-            arg = args[arg_idx]
-            if isinstance(arg, np.ndarray):
-                for i in range(arg.size):
-                    arg.flat[i] = values[value_idx]
-                    value_idx += 1
-            else:
-                args[arg_idx] = values[value_idx]
-                value_idx += 1
-
-        return tuple(args)
-
 
 class MessagePayload:
     """!
@@ -373,6 +366,10 @@ class MessagePayload:
     @classmethod
     def get_type(cls) -> MessageType:
         return cls.MESSAGE_TYPE
+
+    @classmethod
+    def get_type_string(cls):
+        return MessageType.get_type_string(cls.get_type())
 
     @classmethod
     def get_version(cls) -> int:
@@ -392,6 +389,104 @@ class MessagePayload:
 
     def __str__(self):
         return repr(self)
+
+    @classmethod
+    def pack_values(cls, format: Union[str, struct.Struct], buffer: bytes, offset: int = 0, *args):
+        """!
+        @brief Serialize data into a byte stream.
+
+        This is a convenience packing function for consistency with @ref unpack_values(). It behaves similarly to a
+        direct call to `struct.pack_into()`, however the list of values (`args`) may include NumPy `ndarray` elements,
+        which will be flattened automatically.
+
+        @param format A `struct` format string or a `struct.Struct` object describing the data packing.
+        @param buffer A byte buffer in which the serialized data will be stored.
+        @param offset The start offset (in bytes) within `buffer`.
+        @param args The values to be packed.
+
+        @return The size of the serialized data.
+        """
+        # If the user passed in a numpy array, expand it into its elements:
+        #   (1, 2, array([3, 4, 5])) -->
+        #   (1, 2, 3, 4, 5)
+        if any([isinstance(e, np.ndarray) for e in args]):
+            flattened_args = []
+            for e in args:
+                if isinstance(e, np.ndarray):
+                    flattened_args.extend(e.flat)
+                else:
+                    flattened_args.append(e)
+        else:
+            flattened_args = args
+
+        if isinstance(format, struct.Struct):
+            format.pack_into(buffer, offset, *flattened_args)
+            return format.size
+        else:
+            struct.pack_into(format, buffer, offset, *flattened_args)
+            return struct.calcsize(format)
+
+    @classmethod
+    def unpack_values(cls, format: Union[str, struct.Struct], buffer: bytes, offset: int = 0, *args):
+        """!
+        @brief Unpack serialized data.
+
+        This is a helper function, similar to `struct.unpack_from()`, which can be used to unpack class members where
+        _all_ members are NumPy `ndarray` elements.
+
+        @warning
+        Primitives cannot be passed by reference in Python. If you pass in anything other than a NumPy array in `args`,
+        it will _not_ be populated on return.
+
+        For example, the following:
+        ```py
+        my_array = np.ndarray((3,))
+        (my_array[0], my_array[1], my_array[2]) = my_struct.unpack_from(buffer, offset)
+        ```
+
+        can be rewritten as:
+        ```py
+        my_array = np.ndarray((3,))
+        self.unpack_values(my_struct, buffer, offset, my_array)
+        ```
+
+        This function also has the benefit of being consistent with `struct.pack_into()`, making derived classes'
+        `pack()` and `unpack()` functions more symmetrical. For example, the above data can be serialized as follows:
+        ```py
+        self.pack_values(my_struct, buffer, offset, my_double, my_array)
+
+        # or
+
+        my_struct.pack_into(buffer, offset, my_double, *my_array)
+        ```
+
+        @param format A `struct` format string or a `struct.Struct` object describing the data packing.
+        @param buffer A byte buffer containing the data to be unpacked.
+        @param offset The start offset (in bytes) within `buffer`.
+        @param args References to variables to be populated.
+
+        @return The number of bytes consumed.
+        """
+        if isinstance(format, struct.Struct):
+            values = format.unpack_from(buffer, offset)
+            size = format.size
+        else:
+            values = struct.unpack_from(format, buffer, offset)
+            size = struct.calcsize(format)
+
+        args = list(args)
+        value_idx = 0
+        for arg_idx in range(len(args)):
+            arg = args[arg_idx]
+            if isinstance(arg, np.ndarray):
+                for i in range(arg.size):
+                    arg.flat[i] = values[value_idx]
+                    value_idx += 1
+            else:
+                args[arg_idx] = values[value_idx]
+                value_idx += 1
+
+        return size
 
 
 def PackedDataToBuffer(packed_data: bytes, buffer: bytes = None, offset: int = 0,

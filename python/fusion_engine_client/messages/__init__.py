@@ -7,14 +7,15 @@ message_type_to_class = {
     PoseAuxMessage.MESSAGE_TYPE: PoseAuxMessage,
     GNSSInfoMessage.MESSAGE_TYPE: GNSSInfoMessage,
     GNSSSatelliteMessage.MESSAGE_TYPE: GNSSSatelliteMessage,
+    CalibrationStatus.MESSAGE_TYPE: CalibrationStatus,
 
     # Sensor measurement messages.
     IMUMeasurement.MESSAGE_TYPE: IMUMeasurement,
 
     # ROS messages.
-    ros.PoseMessage.MESSAGE_TYPE: ros.PoseMessage,
-    ros.GPSFixMessage.MESSAGE_TYPE: ros.GPSFixMessage,
-    ros.IMUMessage.MESSAGE_TYPE: ros.IMUMessage,
+    ros.ROSPoseMessage.MESSAGE_TYPE: ros.ROSPoseMessage,
+    ros.ROSGPSFixMessage.MESSAGE_TYPE: ros.ROSGPSFixMessage,
+    ros.ROSIMUMessage.MESSAGE_TYPE: ros.ROSIMUMessage,
 
     # Command and control messages.
     CommandResponseMessage.MESSAGE_TYPE: CommandResponseMessage,
@@ -34,3 +35,5 @@ message_type_to_class = {
 }
 
 messages_with_system_time = [t for t, c in message_type_to_class.items() if hasattr(c(), 'system_time_ns')]
+
+message_type_by_name = {c.__name__: t for t, c in message_type_to_class.items()}

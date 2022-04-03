@@ -16,6 +16,9 @@ class ConfigurationSource(IntEnum):
     ACTIVE = 0
     SAVED = 1
 
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
+
 
 class ConfigType(IntEnum):
     INVALID = 0
@@ -25,6 +28,9 @@ class ConfigType(IntEnum):
     OUTPUT_LEVER_ARM = 19
     UART0_BAUD = 256
     UART1_BAUD = 257
+
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
 
 class Direction(IntEnum):
@@ -43,6 +49,9 @@ class Direction(IntEnum):
     ## Error value.
     INVALID = 255
 
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
+
 
 class TransportType(IntEnum):
     INVALID = 0,
@@ -55,9 +64,15 @@ class TransportType(IntEnum):
     ## This is used for requesting the configuration for all interfaces.
     ALL = 255,
 
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
+
 
 class UpdateAction(IntEnum):
     REPLACE = 0
+
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
 
 class _ConfigClassGenerator:
@@ -319,9 +334,11 @@ class GetConfigMessage(MessagePayload):
         Padding(1),
     )
 
-    def __init__(self):
-        self.request_source = ConfigurationSource.ACTIVE
-        self.config_type = ConfigType.INVALID
+    def __init__(self,
+                 config_type: ConfigType = ConfigType.INVALID,
+                 request_source: ConfigurationSource = ConfigurationSource.ACTIVE):
+        self.request_source = config_type
+        self.config_type = request_source
 
     def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
         values = dict(self.__dict__)
@@ -351,6 +368,9 @@ class SaveAction(IntEnum):
     REVERT_TO_SAVED = 1
     REVERT_TO_DEFAULT = 2
 
+    def __str__(self):
+        return super().__str__().replace(self.__class__.__name__ + '.', '')
+
 
 class SaveConfigMessage(MessagePayload):
     """!
@@ -364,8 +384,8 @@ class SaveConfigMessage(MessagePayload):
         Padding(3)
     )
 
-    def __init__(self):
-        self.action = SaveAction.SAVE
+    def __init__(self, action: SaveAction = SaveAction.SAVE):
+        self.action = action
 
     def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
         packed_data = self.SaveConfigMessageConstruct.build({"action": self.action})
@@ -516,9 +536,14 @@ class SetOutputInterfaceConfigMessage(MessagePayload):
         "output_interface_config" / _OutputInterfaceConfigConstruct(),
     )
 
-    def __init__(self):
+    def __init__(self,
+                 output_interface_config: OutputInterfaceConfig = None,
+                 update_action: UpdateAction = UpdateAction.REPLACE):
         self.update_action = UpdateAction.REPLACE
-        self.output_interface_config = OutputInterfaceConfig()
+        if output_interface_config is None:
+            self.output_interface_config = OutputInterfaceConfig()
+        else:
+            self.output_interface_config = output_interface_config
 
     def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
         packed_data = self.SetOutputInterfaceConfigMessageConstruct.build(self.__dict__)
@@ -556,9 +581,14 @@ class GetOutputInterfaceConfigMessage(MessagePayload):
         "output_interface" / _InterfaceIDConstruct,
     )
 
-    def __init__(self):
-        self.request_source = ConfigurationSource.ACTIVE
-        self.output_interface = InterfaceID(TransportType.ALL, 0)
+    def __init__(self,
+                 output_interface: InterfaceID = None,
+                 request_source: ConfigurationSource = ConfigurationSource.ACTIVE):
+        self.request_source = request_source
+        if output_interface is None:
+            self.output_interface = InterfaceID(TransportType.ALL, 0)
+        else:
+            self.output_interface = output_interface
 
     def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
         packed_data = self.GetOutputInterfaceConfigMessageConstruct.build(self.__dict__)

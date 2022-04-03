@@ -10,8 +10,7 @@ class IMUMeasurement(MessagePayload):
     MESSAGE_TYPE = MessageType.IMU_MEASUREMENT
     MESSAGE_VERSION = 0
 
-    _FORMAT = '<3d 3d 3d 3d'
-    _SIZE: int = struct.calcsize(_FORMAT)
+    _STRUCT = struct.Struct('<3d 3d 3d 3d')
 
     def __init__(self):
         self.p1_time = Timestamp()
@@ -30,12 +29,12 @@ class IMUMeasurement(MessagePayload):
 
         offset += self.p1_time.pack(buffer, offset, return_buffer=False)
 
-        struct.pack_into(IMUMeasurement._FORMAT, buffer, offset,
-                         *self.accel_mps2,
-                         *self.accel_std_mps2.flat,
-                         *self.gyro_rps,
-                         *self.gyro_std_rps)
-        offset += IMUMeasurement._SIZE
+        offset += self.pack_values(
+            self._STRUCT, buffer, offset,
+            self.accel_mps2,
+            self.accel_std_mps2,
+            self.gyro_rps,
+            self.gyro_std_rps)
 
         if return_buffer:
             return buffer
@@ -47,12 +46,12 @@ class IMUMeasurement(MessagePayload):
 
         offset += self.p1_time.unpack(buffer, offset)
 
-        MessageHeader.unpack_values(IMUMeasurement._FORMAT, buffer, offset,
-                                    self.accel_mps2,
-                                    self.accel_std_mps2,
-                                    self.gyro_rps,
-                                    self.gyro_std_rps)
-        offset += IMUMeasurement._SIZE
+        offset += self.unpack_values(
+            self._STRUCT, buffer, offset,
+            self.accel_mps2,
+            self.accel_std_mps2,
+            self.gyro_rps,
+            self.gyro_std_rps)
 
         return offset - initial_offset
 
@@ -60,7 +59,7 @@ class IMUMeasurement(MessagePayload):
         return '%s @ %s' % (self.MESSAGE_TYPE.name, self.p1_time)
 
     def __str__(self):
-        return 'IMU measurement @ P1 time %s' % str(self.p1_time)
+        return 'IMU Measurement @ %s' % str(self.p1_time)
 
     @classmethod
     def to_numpy(cls, messages):
@@ -75,4 +74,4 @@ class IMUMeasurement(MessagePayload):
 
     @classmethod
     def calcsize(cls) -> int:
-        return Timestamp.calcsize() + IMUMeasurement._SIZE
+        return Timestamp.calcsize() + cls._STRUCT.size
