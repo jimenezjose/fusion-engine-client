@@ -75,11 +75,11 @@ public:
         // continuously read input stream until system is shutdown / rclcpp::ok().
         ssize_t bytes_read = recvfrom(sock_, buffer, sizeof(buffer), 0, (struct sockaddr *)&their_addr, &addr_len);
         if(bytes_read < 0) {
-          RCLCPP_INFO(node_->get_logger(), "Error reading from socket: %s (%d)\n", std::strerror(errno), errno);
+          RCLCPP_INFO(node_->get_logger(), "Error reading from socket: %s (%d)", std::strerror(errno), errno);
           break;
         }   
         else if (bytes_read == 0) {
-          RCLCPP_INFO(node_->get_logger(), "Socket closed remotely.\n");
+          RCLCPP_INFO(node_->get_logger(), "Socket closed remotely.");
           break;
         }
         inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), their_ip, sizeof(their_ip));
@@ -88,7 +88,7 @@ public:
         fireAtlasByteFrameEvent(buffer, bytes_read, their_ip);
       }
       close(sock_);
-      RCLCPP_INFO(node_->get_logger(), "Finished. %zu bytes read.\n", total_bytes_read);
+      RCLCPP_INFO(node_->get_logger(), "Finished. %zu bytes read.", total_bytes_read);
     }
     catch(std::exception const & ex) {
       RCLCPP_ERROR_STREAM(node_->get_logger(), "Decoder exception: " << ex.what());
@@ -126,7 +126,7 @@ private:
     // create UDP socket.
     sock_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if(sock_ < 0) {
-      RCLCPP_INFO(node_->get_logger(), "Error creating socket.\n");
+      RCLCPP_INFO(node_->get_logger(), "Error creating socket");
       return 2;
     }   
     // bind socket to port.
@@ -137,10 +137,10 @@ private:
     int ret = bind(sock_, (struct sockaddr *) &addr, sizeof(addr));
     if(ret < 0) {
       close(sock_);
-      RCLCPP_INFO(node_->get_logger(), "Error binding.\n");
+      RCLCPP_INFO(node_->get_logger(), "Error binding");
       return 3;
     }
-    RCLCPP_INFO(node_->get_logger(), "Opened port %d\n", port_);
+    RCLCPP_INFO(node_->get_logger(), "Opened port %d", port_);
     return 0;
   }
 
