@@ -1,4 +1,0 @@
-local_repository(
-    name = "fusion_engine_client",
-    path = "..",
-)

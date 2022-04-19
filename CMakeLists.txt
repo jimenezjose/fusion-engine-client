@@ -1,51 +1,65 @@
-# Copyright (C) Point One Navigation - All Rights Reserved
-project(p1_fusion_engine_client)
+cmake_minimum_required(VERSION 3.8)
+project(atlas_driver)
 
-cmake_minimum_required(VERSION 3.3.2)
-
-# Option definitions.
-option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries."
-       ON)
-
-option(BUILD_EXAMPLES "Build example applications." ON)
-
-# Set compilation flags.
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-
-if (MSVC)
-    add_compile_options(/W4 /WX)
-else()
-    add_compile_options(-Wall -Werror)
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-################################################################################
-# Library Definitions
-################################################################################
+# find dependencies
+find_package(ament_cmake_auto REQUIRED)
+# uncomment the following section in order to fill in
+# further dependencies manually.
+# find_package(<dependency> REQUIRED)
+# Require that dependencies from package.xml be available.
+ament_auto_find_build_dependencies(REQUIRED
+  ${${PROJECT_NAME}_BUILD_DEPENDS}
+  ${${PROJECT_NAME}_BUILDTOOL_DEPENDS}
+)
+set(${PROJECT_NAME}_SRC
+  src/atlas_node.cpp
+  src/point_one/fusion_engine/common/logging.cc
+  src/point_one/fusion_engine/messages/crc.cc
+  src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
+)
 
-# Add the source directory to the include path.
-include_directories(${PROJECT_SOURCE_DIR}/src)
+set(UDP_CLIENT_SRC
+  src/linux_udp_client.cpp
+  src/point_one/fusion_engine/common/print_message.cc
+  src/point_one/fusion_engine/common/logging.cc
+  src/point_one/fusion_engine/messages/crc.cc
+  src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
+)
 
-# All messages and supporting code.
-add_library(fusion_engine_client
-            src/point_one/fusion_engine/common/logging.cc
-            src/point_one/fusion_engine/messages/crc.cc
-            src/point_one/fusion_engine/parsers/fusion_engine_framer.cc)
-if (MSVC)
-    target_compile_definitions(fusion_engine_client PRIVATE BUILDING_DLL)
+set(TCP_CLIENT_SRC
+  src/linux_tcp_client.cpp
+  src/point_one/fusion_engine/common/print_message.cc
+  src/point_one/fusion_engine/common/logging.cc
+  src/point_one/fusion_engine/messages/crc.cc
+  src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
+)
+
+# Create this project as an executable.
+ament_auto_add_executable(${PROJECT_NAME}_node_exe
+  ${${PROJECT_NAME}_SRC}
+)
+
+ament_auto_add_executable(udp_client
+  ${UDP_CLIENT_SRC}
+)
+
+ament_auto_add_executable(tcp_client
+  ${TCP_CLIENT_SRC}
+)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # uncomment the line when a copyright and license is not present in all source files
+  #set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # uncomment the line when this package is not in a git repo
+  #set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
 endif()
 
-# Install targets.
-install(TARGETS fusion_engine_client
-        LIBRARY DESTINATION lib)
-
-install(DIRECTORY src/point_one DESTINATION include
-        FILES_MATCHING PATTERN "*.h")
-
-################################################################################
-# Example Applications
-################################################################################
-
-if (BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
+ament_auto_package()
