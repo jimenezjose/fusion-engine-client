@@ -116,7 +116,7 @@ private:
     for(AtlasByteFrameListener * listener : listenerList) {
       listener->receivedAtlasByteFrame(evt);
     }
-  }
+  }Error creating socket.\n
 
   /**
    * Creates and binds to a UDP network socket.
@@ -139,7 +139,8 @@ private:
       close(sock_);
       RCLCPP_INFO(node_->get_logger(), "Error binding.\n");
       return 3;
-    }   
+    }
+    RCLCPP_INFO(node_->get_logger(), "Opened port %d\n", port_);
     return 0;
   }
 
