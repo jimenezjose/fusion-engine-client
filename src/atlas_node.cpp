@@ -19,10 +19,11 @@ class PointOneNavAtlasNode : public AtlasMessageListener, public rclcpp::Node {
 
 public:
   PointOneNavAtlasNode() : Node("atlas_node"), gps(PointOneNavAtlas::getInstance()) {
+    this->declare_parameter("atlas_udp_port", 23456);
     gps_fix_publisher_ = this->create_publisher<gps_msgs::msg::GPSFix>("/atlas/gps_fix", 1);
     imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/atlas/imu", 1);
     timer_ = create_wall_timer(std::chrono::milliseconds(1), std::bind(&PointOneNavAtlasNode::serciveLoopCb, this));
-    gps.initialize(this);
+    gps.initialize(this, this->get_parameter("atlas_udp_port").as_int());
     gps.addAtlasMessageListener(*this);
   }
 

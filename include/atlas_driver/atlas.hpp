@@ -49,8 +49,8 @@ public:
    * @param node Link to ROS environment.
    * @return Nothing.
    */
-  void initialize(rclcpp::Node * node) {
-    recv.initialize(node);
+  void initialize(rclcpp::Node * node, int port) {
+    recv.initialize(node, port);
     this->node_ = node;
   }
 

@@ -45,3 +45,5 @@ docs/versions.html
 **/logs/**
 **/log_folder/**
 
+# VSCode artifacts
+.vscode/

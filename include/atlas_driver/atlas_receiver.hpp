@@ -18,8 +18,6 @@
 #include "atlas_driver/interfaces/atlas_byte_frame_listener.hpp"
 #include "atlas_driver/interfaces/atlas_byte_frame_event.hpp"
 
-#define ATLAS_UDP_PORT 23456
-
 /*
  * Reads bit stream from the Point One Nav Atlas and notifies all event 
  * listeners attached to this singleton object once a raw data packet 
@@ -42,8 +40,9 @@ public:
    * @param node link to ros environment.
    * @return Nothing.
    */
-  void initialize(rclcpp::Node * node) {
+  void initialize(rclcpp::Node * node, int port) {
     node_ = node;
+    port_ = port;
   }
 
   /**
@@ -74,7 +73,7 @@ public:
     try {
       while(rclcpp::ok()) {
         // continuously read input stream until system is shutdown / rclcpp::ok().
-        ssize_t bytes_read = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&their_addr, &addr_len);
+        ssize_t bytes_read = recvfrom(sock_, buffer, sizeof(buffer), 0, (struct sockaddr *)&their_addr, &addr_len);
         if(bytes_read < 0) {
           RCLCPP_INFO(node_->get_logger(), "Error reading from socket: %s (%d)\n", std::strerror(errno), errno);
           break;
@@ -88,7 +87,7 @@ public:
         // notify listeners
         fireAtlasByteFrameEvent(buffer, bytes_read, their_ip);
       }
-      close(sock);
+      close(sock_);
       RCLCPP_INFO(node_->get_logger(), "Finished. %zu bytes read.\n", total_bytes_read);
     }
     catch(std::exception const & ex) {
@@ -97,13 +96,13 @@ public:
   }
 
 private:
-  int port = 0;
-  int sock = 0;
+  int port_ = 0;
+  int sock_ = 0;
   std::vector<AtlasByteFrameListener *> listenerList;
   rclcpp::Node * node_;
 
   /* private constructor for singleton design */
-  AtlasReceiver() : port(ATLAS_UDP_PORT) {}
+  AtlasReceiver() {}
 
   /**
    * Notifies all AtlasByteFrameListeners of a newly recieved byte frame.
@@ -125,19 +124,19 @@ private:
    */
   int open_udp_socket() {
     // create UDP socket.
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if(sock < 0) {
+    sock_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if(sock_ < 0) {
       RCLCPP_INFO(node_->get_logger(), "Error creating socket.\n");
       return 2;
     }   
     // bind socket to port.
     sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+    addr.sin_port = htons(port_);
     addr.sin_addr.s_addr = INADDR_ANY; // any local address
-    int ret = bind(sock, (struct sockaddr *) &addr, sizeof(addr));
+    int ret = bind(sock_, (struct sockaddr *) &addr, sizeof(addr));
     if(ret < 0) {
-      close(sock);
+      close(sock_);
       RCLCPP_INFO(node_->get_logger(), "Error binding.\n");
       return 3;
     }   
