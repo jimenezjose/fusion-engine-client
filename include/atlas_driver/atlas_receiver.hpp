@@ -116,7 +116,7 @@ private:
     for(AtlasByteFrameListener * listener : listenerList) {
       listener->receivedAtlasByteFrame(evt);
     }
-  }Error creating socket.\n
+  }
 
   /**
    * Creates and binds to a UDP network socket.
