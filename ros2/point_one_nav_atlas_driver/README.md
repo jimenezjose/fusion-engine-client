@@ -17,4 +17,5 @@ $ rosdep install -y --ignore-src --from-paths .
 source /opt/ros/galactic/setup.bash
 colcon build
 source install/local_setup.bash
+ros2 run atlas_driver atlas_driver_node_exe
 ```
