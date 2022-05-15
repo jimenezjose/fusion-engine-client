@@ -6,6 +6,7 @@
 #include "std_msgs/msg/string.hpp" 
 #include "gps_msgs/msg/gps_fix.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 #include "atlas_driver/interfaces/atlas_message_listener.hpp"
 #include "atlas_driver/interfaces/atlas_message_event.hpp"
@@ -20,10 +21,20 @@ class PointOneNavAtlasNode : public AtlasMessageListener, public rclcpp::Node {
 public:
   PointOneNavAtlasNode() : Node("atlas_node"), gps(PointOneNavAtlas::getInstance()) {
     this->declare_parameter("atlas_udp_port", 23456);
-    gps_fix_publisher_ = this->create_publisher<gps_msgs::msg::GPSFix>("/atlas/gps_fix", 1);
-    imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/atlas/imu", 1);
+    this->declare_parameter("atlas_connection_type", "udp");
+    this->declare_parameter("atlas_tcp_ip", "");
+    this->declare_parameter("atlas_tcp_port", 30201);
+    pose_publisher_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/atlas/pose", rclcpp::SensorDataQoS());
+    gps_fix_publisher_ = this->create_publisher<gps_msgs::msg::GPSFix>("/atlas/gps_fix", rclcpp::SensorDataQoS());
+    imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/atlas/imu", rclcpp::SensorDataQoS());
     timer_ = create_wall_timer(std::chrono::milliseconds(1), std::bind(&PointOneNavAtlasNode::serciveLoopCb, this));
-    gps.initialize(this, this->get_parameter("atlas_udp_port").as_int());
+    gps.initialize(
+      this,
+      this->get_parameter("atlas_udp_port").as_int(),
+      this->get_parameter("atlas_connection_type").as_string(),
+      this->get_parameter("atlas_tcp_ip").as_string(),
+      this->get_parameter("atlas_tcp_port").as_int()
+    );
     gps.addAtlasMessageListener(*this);
   }
 
@@ -33,16 +44,24 @@ public:
    * @return Nothing.
    */
   void receivedAtlasMessage(AtlasMessageEvent & evt) {
+    auto time = now();
     if(evt.message_type == AtlasMessageType::GPS_FIX) {
+      evt.gps_fix.header.stamp = time;
       gps_fix_publisher_->publish(evt.gps_fix);
     }
     else if(evt.message_type == AtlasMessageType::IMU) {
+      evt.imu.header.stamp = time;
       imu_publisher_->publish(evt.imu);
+    }
+    else if (evt.message_type == AtlasMessageType::POSE) {
+      evt.pose.header.stamp = time;
+      pose_publisher_->publish(evt.pose);
     }
   }
 
 private:
   PointOneNavAtlas & gps;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher_;
   rclcpp::Publisher<gps_msgs::msg::GPSFix>::SharedPtr gps_fix_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;

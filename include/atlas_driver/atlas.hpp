@@ -49,8 +49,8 @@ public:
    * @param node Link to ROS environment.
    * @return Nothing.
    */
-  void initialize(rclcpp::Node * node, int port) {
-    recv.initialize(node, port);
+  void initialize(rclcpp::Node * node, int udp_port, std::string connection_type, std::string tcp_ip, int tcp_port) {
+    recv.initialize(node, udp_port, connection_type, tcp_ip, tcp_port);
     this->node_ = node;
   }
 
@@ -81,7 +81,12 @@ public:
       auto & contents = *reinterpret_cast<const IMUMessage*>(payload);
       AtlasMessageEvent evt( AtlasUtils::toImu(contents) );
       fireAtlasMessageEvent(evt);
-    } 
+    }
+    else if (header.message_type == MessageType::ROS_POSE) {
+      auto & contents = *reinterpret_cast<const point_one::fusion_engine::messages::ros::PoseMessage*>(payload);
+      AtlasMessageEvent evt( AtlasUtils::toPose(contents) );
+      fireAtlasMessageEvent(evt);
+    }
   }
 
   /**
@@ -99,7 +104,16 @@ public:
    * @return Nothing.
    */
   void service() {
-    recv.udp_service();
+    auto connection_type = recv.get_connection_type();
+    if (connection_type == "tcp") {
+      recv.tcp_service();
+    }
+    else if (connection_type == "udp") {
+      recv.udp_service();
+    }
+    else {
+      RCLCPP_INFO(node_->get_logger(), "Invalid connection type %s", connection_type.c_str());
+    }
   }
 
 private:

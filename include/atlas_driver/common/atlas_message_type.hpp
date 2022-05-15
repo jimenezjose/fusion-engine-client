@@ -13,6 +13,10 @@ enum class AtlasMessageType {
    * @see http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html
    * */
   IMU = 1,
+  /** Standard ROS POSE message. 
+   * @see https://docs.ros.org/api/geometry_msgs/html/msg/PoseStamped.html
+   * */
+  POSE = 2,
 };
 
 #endif
