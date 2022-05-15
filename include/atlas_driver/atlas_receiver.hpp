@@ -102,6 +102,8 @@ public:
     uint8_t buffer[1024];
     size_t total_bytes_read = 0;
 
+    open_tcp_socket();
+
     try {
       while(rclcpp::ok()) {
         ssize_t bytes_read = recv(sock_, buffer, sizeof(buffer), 0);
