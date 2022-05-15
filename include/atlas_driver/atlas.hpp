@@ -105,6 +105,7 @@ public:
    */
   void service() {
     auto connection_type = recv.get_connection_type();
+    RCLCPP_INFO(node_->get_logger(), "Using connection_type %s", connection_type.c_str());
     if (connection_type == "tcp") {
       recv.tcp_service();
     }
