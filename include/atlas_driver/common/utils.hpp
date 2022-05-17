@@ -66,6 +66,11 @@ public:
     return imu;
   }
 
+  /**
+   * Helper method to translate atlas PoseMessage to ROS standard PoseStamped.
+   * @param contents Culprit pose data to be translated.
+   * @return ROS standard message - PoseStamped;
+   */
   static geometry_msgs::msg::PoseStamped toPose(const point_one::fusion_engine::messages::ros::PoseMessage & contents) {
     geometry_msgs::msg::PoseStamped pose_stamped;
     pose_stamped.pose.position.x = contents.position_rel_m[0];

@@ -98,6 +98,11 @@ public:
     }
   }
 
+  /**
+   * Read tcp input stream from the Point One Nav until this
+   * system has shut down or this node is killed.
+   * @return Nothing.
+   */
   void tcp_service() {
     uint8_t buffer[1024];
     size_t total_bytes_read = 0;
@@ -124,6 +129,10 @@ public:
 
   }
 
+  /**
+   * Getter for type of network transport layer protocol (udp/tcp).
+   * @return String identification of connection type protocol.
+   */
   std::string get_connection_type() {
     return connection_type_;
   }
@@ -180,6 +189,10 @@ private:
     return 0;
   }
 
+  /**
+   * Creates and connects to a tcp network socket.
+   * @return status code 0 on success, non-zero otherwise.
+   */
   int open_tcp_socket() {
     // Connect the socket.
     sock_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);

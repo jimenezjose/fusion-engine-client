@@ -69,6 +69,11 @@ public:
     }
   }
 
+  /**
+   * Translate GPSFix to NavFixMsg
+   * @param gps_fix Atlas gps data point.
+   * @return Nothing.
+   */
   void publishNavFixMsg(const gps_msgs::msg::GPSFix &gps_fix)
   {
     sensor_msgs::msg::NavSatFix fix;

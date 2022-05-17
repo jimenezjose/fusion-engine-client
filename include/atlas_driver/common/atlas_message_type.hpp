@@ -10,11 +10,11 @@ enum class AtlasMessageType {
    * */
   GPS_FIX = 0,
   /** Standard ROS IMU message. 
-   * @see http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html
+   *  @see http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html
    * */
   IMU = 1,
   /** Standard ROS POSE message. 
-   * @see https://docs.ros.org/api/geometry_msgs/html/msg/PoseStamped.html
+   *  @see https://docs.ros.org/api/geometry_msgs/html/msg/PoseStamped.html
    * */
   POSE = 2,
 };

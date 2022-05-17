@@ -14,7 +14,7 @@ public:
 
   AtlasByteFrameEvent(uint8_t * frame, size_t bytes_read) 
       : frame{frame}, bytes_read{bytes_read} {}
-
+  
 };
 
 #endif

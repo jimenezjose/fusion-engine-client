@@ -15,6 +15,7 @@ ament_auto_find_build_dependencies(REQUIRED
   ${${PROJECT_NAME}_BUILD_DEPENDS}
   ${${PROJECT_NAME}_BUILDTOOL_DEPENDS}
 )
+
 set(${PROJECT_NAME}_SRC
   src/atlas_node.cpp
   src/point_one/fusion_engine/common/logging.cc
