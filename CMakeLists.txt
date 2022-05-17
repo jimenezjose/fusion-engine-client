@@ -15,15 +15,41 @@ ament_auto_find_build_dependencies(REQUIRED
   ${${PROJECT_NAME}_BUILD_DEPENDS}
   ${${PROJECT_NAME}_BUILDTOOL_DEPENDS}
 )
+
 set(${PROJECT_NAME}_SRC
   src/atlas_node.cpp
   src/point_one/fusion_engine/common/logging.cc
   src/point_one/fusion_engine/messages/crc.cc
   src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
 )
+
+set(UDP_CLIENT_SRC
+  src/linux_udp_client.cpp
+  src/point_one/fusion_engine/common/print_message.cc
+  src/point_one/fusion_engine/common/logging.cc
+  src/point_one/fusion_engine/messages/crc.cc
+  src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
+)
+
+set(TCP_CLIENT_SRC
+  src/linux_tcp_client.cpp
+  src/point_one/fusion_engine/common/print_message.cc
+  src/point_one/fusion_engine/common/logging.cc
+  src/point_one/fusion_engine/messages/crc.cc
+  src/point_one/fusion_engine/parsers/fusion_engine_framer.cc
+)
+
 # Create this project as an executable.
 ament_auto_add_executable(${PROJECT_NAME}_node_exe
   ${${PROJECT_NAME}_SRC}
+)
+
+ament_auto_add_executable(udp_client
+  ${UDP_CLIENT_SRC}
+)
+
+ament_auto_add_executable(tcp_client
+  ${TCP_CLIENT_SRC}
 )
 
 if(BUILD_TESTING)

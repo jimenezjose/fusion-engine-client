@@ -3,6 +3,7 @@
 
 #include "sensor_msgs/msg/imu.hpp"
 #include "gps_msgs/msg/gps_fix.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "point_one/fusion_engine/messages/ros.h"
 
 class AtlasUtils {
@@ -63,6 +64,23 @@ public:
     imu.linear_acceleration.z = contents.acceleration_mps2[2];
     std::copy(std::begin(contents.acceleration_covariance), std::end(contents.acceleration_covariance), std::begin(imu.linear_acceleration_covariance));
     return imu;
+  }
+
+  /**
+   * Helper method to translate atlas PoseMessage to ROS standard PoseStamped.
+   * @param contents Culprit pose data to be translated.
+   * @return ROS standard message - PoseStamped;
+   */
+  static geometry_msgs::msg::PoseStamped toPose(const point_one::fusion_engine::messages::ros::PoseMessage & contents) {
+    geometry_msgs::msg::PoseStamped pose_stamped;
+    pose_stamped.pose.position.x = contents.position_rel_m[0];
+    pose_stamped.pose.position.y = contents.position_rel_m[1];
+    pose_stamped.pose.position.z = contents.position_rel_m[2];
+    pose_stamped.pose.orientation.x = contents.orientation[0];
+    pose_stamped.pose.orientation.y = contents.orientation[1];
+    pose_stamped.pose.orientation.z = contents.orientation[2];
+    pose_stamped.pose.orientation.w = contents.orientation[3];
+    return pose_stamped;
   }
 };
 
