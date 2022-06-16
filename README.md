@@ -6,7 +6,6 @@ FusionEngine delivers 10cm location accuracy in any environment using its propri
 
 ##### Install driver dependencies:
 ```
-$ cd ros2/point_one_nav_atlas_driver
 $ sudo apt-get update
 $ sudo rosdep update
 $ rosdep install -y --ignore-src --from-paths .
