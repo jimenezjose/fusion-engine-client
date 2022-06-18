@@ -31,7 +31,7 @@ public:
     frame_id_ = this->get_parameter("frame_id").as_string();
     pose_publisher_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/atlas/pose", rclcpp::SensorDataQoS());
     gps_fix_publisher_ = this->create_publisher<gps_msgs::msg::GPSFix>("/atlas/gps_fix", rclcpp::SensorDataQoS());
-    nav_fix_publisher_ = this->create_publisher<sensor_msgs::msg::NavSatFix>("/atlas/fix", rclcpp::SensorDataQoS());
+    nav_sat_fix_publisher_ = this->create_publisher<sensor_msgs::msg::NavSatFix>("/atlas/nav_sat_fix", rclcpp::SensorDataQoS());
     imu_publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/atlas/imu", rclcpp::SensorDataQoS());
     timer_ = create_wall_timer(std::chrono::milliseconds(1), std::bind(&PointOneNavAtlasNode::serciveLoopCb, this));
     gps.initialize(
@@ -55,14 +55,18 @@ public:
       evt.gps_fix.header.frame_id = frame_id_;
       evt.gps_fix.header.stamp = time;
       gps_fix_publisher_->publish(evt.gps_fix);
-      publishNavFixMsg(evt.gps_fix);
+    }
+    else if(evt.message_type == AtlasMessageType::NAV_SAT_FIX) {
+      evt.nav_sat_fix.header.frame_id = frame_id_;
+      evt.nav_sat_fix.header.stamp = time;
+      nav_sat_fix_publisher_->publish(evt.nav_sat_fix);
     }
     else if(evt.message_type == AtlasMessageType::IMU) {
       evt.imu.header.frame_id = frame_id_;
       evt.imu.header.stamp = time;
       imu_publisher_->publish(evt.imu);
     }
-    else if (evt.message_type == AtlasMessageType::POSE) {
+    else if(evt.message_type == AtlasMessageType::POSE) {
       evt.pose.header.frame_id = frame_id_;
       evt.pose.header.stamp = time;
       pose_publisher_->publish(evt.pose);
@@ -93,7 +97,7 @@ public:
     fix.altitude = gps_fix.altitude;
     fix.position_covariance = gps_fix.position_covariance;
     fix.position_covariance_type = gps_fix.position_covariance_type;
-    nav_fix_publisher_->publish(fix);
+    nav_sat_fix_publisher_->publish(fix);
   }
 
 private:
@@ -101,7 +105,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher_;
   rclcpp::Publisher<gps_msgs::msg::GPSFix>::SharedPtr gps_fix_publisher_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_publisher_;
-  rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr nav_fix_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr nav_sat_fix_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::string frame_id_;
