@@ -9,9 +9,9 @@
 class AtlasUtils {
 public:
   /**
-   * Helper method to translate atlas GPSFixMessage to ROS standard GPSFix.
+   * Helper method to translate Atlas GPSFixMessage to ROS standard GPSFix.
    * @param contents Culprit gps data to be translated.
-   * @return ROS standard message - GPSFix;
+   * @return ROS standard message - GPSFix.
    */
   static gps_msgs::msg::GPSFix toGPSFix(const point_one::fusion_engine::messages::ros::GPSFixMessage & contents) {
     gps_msgs::msg::GPSFix gps_fix;
@@ -40,13 +40,40 @@ public:
     gps_fix.err_dip   = contents.err_dip_deg;
     std::copy(std::begin(contents.position_covariance_m2), std::end(contents.position_covariance_m2), std::begin(gps_fix.position_covariance));
     gps_fix.position_covariance_type = contents.position_covariance_type;
+    // TODO: gps_fix.status.status?
     return gps_fix;
   }
 
   /**
-   * Helper method to translate atlas IMUMessage to ROS standard Imu.
+   * Helper method to translate Atlas GPSFixMessage to ROS standard NavSatFix.
    * @param contents Culprit gps data to be translated.
-   * @return ROS standard message - Imu;
+   * @return ROS standard message - GPSFix;
+   */
+  static sensor_msgs::msg::NavSatFix toNavSatFix(const point_one::fusion_engine::messages::ros::GPSFixMessage & contents) {
+    sensor_msgs::msg::NavSatFix nav_sat_fix;
+    // fix.header = gps_fix.header;
+    // fix.status.status = gps_fix.status.status;
+    // fix.status.service = 0;
+    // if (gps_fix.status.position_source & gps_msgs::msg::GPSStatus::SOURCE_GPS)
+    // {
+    //   fix.status.service = fix.status.service | sensor_msgs::msg::NavSatStatus::SERVICE_GPS;
+    // }
+    // if (gps_fix.status.orientation_source & gps_msgs::msg::GPSStatus::SOURCE_MAGNETIC)
+    // {
+    //   fix.status.service = fix.status.service | sensor_msgs::msg::NavSatStatus::SERVICE_COMPASS;
+    // }
+    nav_sat_fix.latitude  = contents.latitude_deg;
+    nav_sat_fix.longitude = contents.longitude_deg;
+    nav_sat_fix.altitude  = contents.altitude_m;
+    std::copy(std::begin(contents.position_covariance_m2), std::end(contents.position_covariance_m2), std::begin(nav_sat_fix.position_covariance));
+    nav_sat_fix.position_covariance_type = contents.position_covariance_type;
+    return nav_sat_fix;
+  }
+
+  /**
+   * Helper method to translate Atlas IMUMessage to ROS standard Imu.
+   * @param contents Culprit gps data to be translated.
+   * @return ROS standard message - Imu.
    */
   static sensor_msgs::msg::Imu toImu(const point_one::fusion_engine::messages::ros::IMUMessage & contents) {
     sensor_msgs::msg::Imu imu;
@@ -67,9 +94,9 @@ public:
   }
 
   /**
-   * Helper method to translate atlas PoseMessage to ROS standard PoseStamped.
+   * Helper method to translate Atlas PoseMessage to ROS standard PoseStamped.
    * @param contents Culprit pose data to be translated.
-   * @return ROS standard message - PoseStamped;
+   * @return ROS standard message - PoseStamped.
    */
   static geometry_msgs::msg::PoseStamped toPose(const point_one::fusion_engine::messages::ros::PoseMessage & contents) {
     geometry_msgs::msg::PoseStamped pose_stamped;

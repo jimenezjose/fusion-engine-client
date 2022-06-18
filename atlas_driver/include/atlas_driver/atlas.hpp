@@ -12,6 +12,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "gps_msgs/msg/gps_fix.hpp"
+#include "sensor_msgs/msg/nav_sat_fix.hpp"
 
 #include "atlas_driver/interfaces/atlas_message_listener.hpp"
 #include "atlas_driver/interfaces/atlas_message_event.hpp"
@@ -76,13 +77,16 @@ public:
       auto & contents = *reinterpret_cast<const GPSFixMessage*>(payload); 
       AtlasMessageEvent evt( AtlasUtils::toGPSFix(contents) );
       fireAtlasMessageEvent(evt);
+      // Also report standard {@link NavSatFix} translation of {@link GPSFix}.
+      AtlasMessageEvent navSatFixEvt( AtlasUtils::toNavSatFix(contents) );
+      fireAtlasMessageEvent(navSatFixEvt);
     } 
     else if(header.message_type == MessageType::ROS_IMU) {
       auto & contents = *reinterpret_cast<const IMUMessage*>(payload);
       AtlasMessageEvent evt( AtlasUtils::toImu(contents) );
       fireAtlasMessageEvent(evt);
     }
-    else if (header.message_type == MessageType::ROS_POSE) {
+    else if(header.message_type == MessageType::ROS_POSE) {
       auto & contents = *reinterpret_cast<const point_one::fusion_engine::messages::ros::PoseMessage*>(payload);
       AtlasMessageEvent evt( AtlasUtils::toPose(contents) );
       fireAtlasMessageEvent(evt);
