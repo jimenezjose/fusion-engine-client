@@ -4,6 +4,7 @@ from typing import NamedTuple, Optional, List
 from construct import (Struct, Float32l, Int32ul, Int16ul, Int8ul, Padding, this, Flag, Bytes, Array, Adapter)
 
 from ..utils.construct_utils import NamedTupleAdapter, AutoEnum
+from ..utils.enum_utils import IntEnum
 from .defs import *
 
 
@@ -16,9 +17,6 @@ class ConfigurationSource(IntEnum):
     ACTIVE = 0
     SAVED = 1
 
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
-
 
 class ConfigType(IntEnum):
     INVALID = 0
@@ -26,11 +24,11 @@ class ConfigType(IntEnum):
     DEVICE_COARSE_ORIENTATION = 17
     GNSS_LEVER_ARM = 18
     OUTPUT_LEVER_ARM = 19
+    VEHICLE_DETAILS = 20
+    WHEEL_CONFIG = 21
+    HARDWARE_TICK_CONFIG = 22
     UART0_BAUD = 256
     UART1_BAUD = 257
-
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
 
 class Direction(IntEnum):
@@ -49,9 +47,75 @@ class Direction(IntEnum):
     ## Error value.
     INVALID = 255
 
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
+class VehicleModel(IntEnum):
+    UNKNOWN_VEHICLE = 0,
+    DATASPEED_CD4 = 1,
+    ## In general, all J1939 vehicles support a subset of the J1939 standard and
+    ## may be set to vehicle model `J1939`. Their 29-bit CAN IDs may differ
+    ## based on how the platform assigns message priorities and source
+    ## addresses, but the underlying program group number (PGN) and message
+    ## contents will be consistent.
+    ##
+    ## For most vehicles, it is not necessary to specify and particular make and
+    ## model.
+    J1939 = 2,
+
+    LEXUS_CT200H = 20,
+
+    KIA_SORENTO = 40,
+    KIA_SPORTAGE = 41,
+
+    AUDI_Q7 = 60,
+    AUDI_A8L = 61,
+
+    TESLA_MODEL_X = 80,
+    TESLA_MODEL_3 = 81,
+
+    HYUNDAI_ELANTRA = 100,
+
+    PEUGEOT_206 = 120,
+
+    MAN_TGX = 140,
+
+    FACTION = 160,
+
+    LINCOLN_MKZ = 180,
+
+    BMW_7 = 200
+
+
+class WheelSensorType(IntEnum):
+    NONE = 0,
+    TICK_RATE = 1,
+    TICKS = 2,
+    WHEEL_SPEED = 3,
+    VEHICLE_SPEED = 4,
+    VEHICLE_TICKS = 5
+
+
+class AppliedSpeedType(IntEnum):
+    NONE = 0,
+    REAR_WHEELS = 1,
+    FRONT_WHEELS = 2,
+    FRONT_AND_REAR_WHEELS = 3,
+    VEHICLE_BODY = 4
+
+
+class SteeringType(IntEnum):
+    UNKNOWN = 0,
+    FRONT = 1,
+    FRONT_AND_REAR = 2
+
+class TickMode(IntEnum):
+    OFF = 0,
+    RISING_EDGE = 1,
+    FALLING_EDGE = 2
+
+class TickDirection(IntEnum):
+    OFF = 0,
+    FORWARD_ACTIVE_HIGH = 1,
+    FORWARD_ACTIVE_LOW = 2
 
 class TransportType(IntEnum):
     INVALID = 0,
@@ -64,15 +128,9 @@ class TransportType(IntEnum):
     ## This is used for requesting the configuration for all interfaces.
     ALL = 255,
 
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
-
 
 class UpdateAction(IntEnum):
     REPLACE = 0
-
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
 
 class _ConfigClassGenerator:
@@ -179,6 +237,95 @@ class _ConfigClassGenerator:
         Padding(2),
     )
 
+    class VehicleDetails(NamedTuple):
+        """!
+        @brief Information including vehicle model and dimensions.
+        """
+        vehicle_model: VehicleModel = VehicleModel.UNKNOWN_VEHICLE
+        ## The distance between the front axle and rear axle (in meters).
+        wheelbase_m: float = 0
+        ## The distance between the two front wheels (in meters).
+        front_track_width_m: float = 0
+        ## The distance between the two rear wheels (in meters).
+        rear_track_width_m: float = 0
+
+    VehicleDetailsConstruct = Struct(
+        "vehicle_model" / AutoEnum(Int16ul, VehicleModel),
+        Padding(10),
+        "wheelbase_m" / Float32l,
+        "front_track_width_m" / Float32l,
+        "rear_track_width_m" / Float32l,
+    )
+
+    class WheelConfig(NamedTuple):
+        """!
+        Vehicle/wheel speed measurement configuration settings.
+        """
+        ## The type of vehicle/wheel speed measurements produced by the vehicle.
+        wheel_sensor_type: WheelSensorType = WheelSensorType.NONE
+        ## The type of vehicle/wheel speed measurements to be applied to the navigation solution.
+        applied_speed_type: AppliedSpeedType = AppliedSpeedType.REAR_WHEELS
+        ## Indication of which of the vehicle's wheels are steered.
+        steering_type: SteeringType = SteeringType.UNKNOWN
+        ## The nominal rate at which wheel speed measurements will be provided (in seconds).
+        wheel_update_interval_sec: float = math.nan
+        ## The nominal rate at which wheel tick measurements will be provided (in seconds).
+        wheel_tick_output_interval_sec: float = math.nan
+        ## Ratio between angle of the steering wheel and the angle of the wheels on the ground.
+        steering_ratio: float = math.nan
+        ## The scale factor to convert from wheel encoder ticks to distance (in meters/tick).
+        wheel_ticks_to_m: float = math.nan
+        ## The maximum value (inclusive) before the wheel tick measurement will roll over.
+        wheel_tick_max_value: int = 0
+        ## `True` if the reported wheel tick measurements should be interpreted as signed integers, or `False` if they
+        ## should be interpreted as unsigned integers.
+        wheel_ticks_signed: bool = False
+        ## `True` if the wheel tick measurements increase by a positive amount when driving forward or backward.
+        ## `False` if wheel tick measurements decrease when driving backward.
+        wheel_ticks_always_increase: bool = True
+
+    WheelConfigConstruct = Struct(
+        "wheel_sensor_type" / AutoEnum(Int8ul, WheelSensorType),
+        "applied_speed_type" / AutoEnum(Int8ul, AppliedSpeedType),
+        "steering_type" / AutoEnum(Int8ul, SteeringType),
+        Padding(1),
+        "wheel_update_interval_sec" / Float32l,
+        "wheel_tick_output_interval_sec" / Float32l,
+        "steering_ratio" / Float32l,
+        "wheel_ticks_to_m" / Float32l,
+        "wheel_tick_max_value" / Int32ul,
+        "wheel_ticks_signed" / Flag,
+        "wheel_ticks_always_increase" / Flag,
+        Padding(2),
+    )
+
+    class HardwareTickConfig(NamedTuple):
+        """!
+        Tick configuration settings.
+        """
+        ##
+        # If enabled -- tick mode is not OFF -- the device will accumulate ticks received on the I/O pin, and use them
+        # as an indication of vehicle speed. If enabled, you must also specify @ref wheel_ticks_to_m to indicate the
+        # mapping of wheel tick encoder angle to tire circumference. All other wheel tick-related parameters such as
+        # tick capture rate, rollover value, etc. will be set internally.
+        tick_mode: TickMode = TickMode.OFF
+
+        ##
+        # When direction is OFF, the incoming ticks will be treated as unsigned, meaning the tick count will continue
+        # to increase in either direction of travel. If direction is not OFF, a second direction I/O pin will be used
+        # to indicate the direction of travel and the accumulated tick count will increase/decrease accordingly.
+        tick_direction: TickDirection = TickDirection.OFF
+
+        ## The scale factor to convert from wheel encoder ticks to distance (in meters/tick).
+        wheel_ticks_to_m: float = math.nan
+
+    HardwareTickConfigConstruct = Struct(
+        "tick_mode" / AutoEnum(Int8ul, TickMode),
+        "tick_direction" / AutoEnum(Int8ul, TickDirection),
+        Padding(2),
+        "wheel_ticks_to_m" / Float32l,
+    )
+
     class Empty(NamedTuple):
         """!
         @brief Dummy specifier for empty config.
@@ -249,6 +396,26 @@ class DeviceCourseOrientationConfig(_conf_gen.CoarseOrientation):
     """
     pass
 
+@_conf_gen.create_config_class(ConfigType.VEHICLE_DETAILS, _conf_gen.VehicleDetailsConstruct)
+class VehicleDetailsConfig(_conf_gen.VehicleDetails):
+    """!
+    @brief Information including vehicle model and dimensions.
+    """
+    pass
+
+@_conf_gen.create_config_class(ConfigType.WHEEL_CONFIG, _conf_gen.WheelConfigConstruct)
+class WheelConfig(_conf_gen.WheelConfig):
+    """!
+    @brief Information pertaining to wheel speeds.
+    """
+    pass
+
+@_conf_gen.create_config_class(ConfigType.HARDWARE_TICK_CONFIG, _conf_gen.HardwareTickConfigConstruct)
+class HardwareTickConfig(_conf_gen.HardwareTickConfig):
+    """!
+    @brief Tick configuration settings.
+    """
+    pass
 
 @_conf_gen.create_config_class(ConfigType.INVALID, _conf_gen.EmptyConstruct)
 class InvalidConfig(_conf_gen.Empty):
@@ -279,15 +446,20 @@ class SetConfigMessage(MessagePayload):
     MESSAGE_TYPE = MessageType.SET_CONFIG
     MESSAGE_VERSION = 0
 
+    # Flag to immediately save the config after applying this setting.
+    FLAG_APPLY_AND_SAVE = 0x01
+
     SetConfigMessageConstruct = Struct(
         "config_type" / AutoEnum(Int16ul, ConfigType),
-        Padding(2),
+        "flags" / Int8ul,
+        Padding(1),
         "config_change_length_bytes" / Int32ul,
         "config_change_data" / Bytes(this.config_change_length_bytes),
     )
 
-    def __init__(self, config_object: Optional[_conf_gen.ConfigClass] = None):
+    def __init__(self, config_object: Optional[_conf_gen.ConfigClass] = None, flags=0x0):
         self.config_object = config_object
+        self.flags = flags
 
     def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
         if not isinstance(self.config_object, _conf_gen.ConfigClass):
@@ -298,6 +470,7 @@ class SetConfigMessage(MessagePayload):
         data = construct_obj.build(self.config_object)
         values = {
             'config_type': config_type,
+            'flags': self.flags,
             'config_change_data': data,
             'config_change_length_bytes': len(data)
         }
@@ -307,6 +480,7 @@ class SetConfigMessage(MessagePayload):
     def unpack(self, buffer: bytes, offset: int = 0) -> int:
         parsed = self.SetConfigMessageConstruct.parse(buffer[offset:])
         self.config_object = _conf_gen.CONFIG_MAP[parsed.config_type].parse(parsed.config_change_data)
+        self.flags = parsed.flags
         return parsed._io.tell()
 
     def __str__(self):
@@ -367,9 +541,6 @@ class SaveAction(IntEnum):
     SAVE = 0
     REVERT_TO_SAVED = 1
     REVERT_TO_DEFAULT = 2
-
-    def __str__(self):
-        return super().__str__().replace(self.__class__.__name__ + '.', '')
 
 
 class SaveConfigMessage(MessagePayload):

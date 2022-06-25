@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone
-from enum import IntEnum
 import logging
 import math
 import struct
 from typing import Union
 from zlib import crc32
 
+from construct import Adapter, Struct, Int32ul
 import numpy as np
+
+from ..utils.enum_utils import IntEnum
 
 _logger = logging.getLogger('point_one.fusion_engine.messages.defs')
 
@@ -62,9 +64,9 @@ class Response(IntEnum):
     EXECUTION_FAILURE = 5
     ## The header `payload_size_bytes` is in conflict with the size of the message based on its type or type
     ## specific length fields.
-    INCONSISTENT_PAYLOAD_LENGTH = 6,
+    INCONSISTENT_PAYLOAD_LENGTH = 6
     ## Requested data was corrupted and not available.
-    DATA_CORRUPTED = 7,
+    DATA_CORRUPTED = 7
 
 
 class MessageType(IntEnum):
@@ -76,6 +78,7 @@ class MessageType(IntEnum):
     GNSS_SATELLITE = 10002
     POSE_AUX = 10003
     CALIBRATION_STATUS = 10004
+    RELATIVE_ENU_POSITION = 10005
 
     # Sensor measurement messages.
     IMU_MEASUREMENT = 11000
@@ -91,6 +94,7 @@ class MessageType(IntEnum):
     RESET_REQUEST = 13002
     VERSION_INFO = 13003
     EVENT_NOTIFICATION = 13004
+    SHUTDOWN_REQUEST = 13005
 
     SET_CONFIG = 13100
     GET_CONFIG = 13101
@@ -500,3 +504,39 @@ def PackedDataToBuffer(packed_data: bytes, buffer: bytes = None, offset: int = 0
         return buffer
     else:
         return len(packed_data)
+
+
+TimestampRawConstruct = Struct(
+    "int_part" / Int32ul,
+    "frac_part_ns" / Int32ul,
+)
+
+
+class TimestampAdapter(Adapter):
+    """!
+    @brief Adapter for automatically converting between construct streams and
+           Timestamp.
+    """
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+    def _decode(self, obj, context, path):
+        # skip _io member
+        if obj.int_part == Timestamp._INVALID or obj.frac_part_ns == Timestamp._INVALID:
+           seconds = math.nan
+        else:
+            seconds = obj.int_part + (obj.frac_part_ns * 1e-9)
+        return Timestamp(seconds)
+
+    def _encode(self, obj, context, path):
+        if math.isnan(obj.seconds):
+            int_part = Timestamp._INVALID
+            frac_part_ns = Timestamp._INVALID
+        else:
+            int_part = int(obj.seconds)
+            frac_part_ns = int((obj.seconds - int_part) * 1e9)
+        return {'int_part': int_part, 'frac_part_ns': frac_part_ns}
+
+
+TimestampConstruct = TimestampAdapter(TimestampRawConstruct)

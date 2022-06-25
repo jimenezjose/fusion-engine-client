@@ -61,12 +61,34 @@ enum class ConfigType : uint16_t {
   GNSS_LEVER_ARM = 18,
 
   /**
-   * The location of the desired output location with respect to the vehicle
+   * The offset of the desired output location with respect to the vehicle
    * body frame (in meters).
    *
    * Payload format: @ref Point3f
    */
   OUTPUT_LEVER_ARM = 19,
+
+  /**
+   * Information about the vehicle including model and dimensions.
+   *
+   * Payload format: @ref VehicleDetails
+   */
+  VEHICLE_DETAILS = 20,
+
+  /**
+   * Information pertaining to wheel speed/rotation measurements.
+   *
+   * Payload format: @ref WheelConfig
+   */
+  WHEEL_CONFIG = 21,
+
+  /**
+   * Indicates the mode and direction used when capturing vehicle wheel tick
+   * data from a voltage pulse on an I/O pin.
+   *
+   * Payload format: @ref HardwareTickConfig
+   */
+  HARDWARE_TICK_CONFIG = 22,
 
   /**
    * Configure the UART0 serial baud rate (in bits/second).
@@ -107,6 +129,15 @@ inline const char* to_string(ConfigType type) {
 
     case ConfigType::OUTPUT_LEVER_ARM:
       return "Output Lever Arm";
+
+    case ConfigType::VEHICLE_DETAILS:
+      return "Vehicle Details";
+
+    case ConfigType::WHEEL_CONFIG:
+      return "Wheel Config";
+
+    case ConfigType::HARDWARE_TICK_CONFIG:
+      return "Hardware Tick Config";
 
     case ConfigType::UART0_BAUD:
       return "UART0 Baud Rate";
@@ -239,10 +270,16 @@ struct alignas(4) SetConfigMessage : public MessagePayload {
   static constexpr MessageType MESSAGE_TYPE = MessageType::SET_CONFIG;
   static constexpr uint8_t MESSAGE_VERSION = 0;
 
+  /** Flag to immediately save the config after applying this setting. */
+  static constexpr uint8_t FLAG_APPLY_AND_SAVE = 0x01;
+
   /** The type of parameter to be configured. */
   ConfigType config_type;
 
-  uint8_t reserved[2] = {0};
+  /** Bitmask of additional flags to modify the command. */
+  uint8_t flags = 0;
+
+  uint8_t reserved[1] = {0};
 
   /** The size of the parameter value, @ref config_change_data (in bytes). */
   uint32_t config_length_bytes = 0;
@@ -394,6 +431,496 @@ struct alignas(4) CoarseOrientation {
   Direction z_direction = Direction::UP;
 
   uint8_t reserved[2] = {0};
+};
+
+/**
+ * @brief The make and model of the vehicle.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class VehicleModel : uint16_t {
+  UNKNOWN_VEHICLE = 0,
+  DATASPEED_CD4 = 1,
+  // In general, all J1939 vehicles support a subset of the J1939 standard and
+  // may be set to vehicle model `J1939`. Their 29-bit CAN IDs may differ
+  // based on how the platform assigns message priorities and source
+  // addresses, but the underlying program group number (PGN) and message
+  // contents will be consistent.
+  //
+  // For most vehicles, it is not necessary to specify and particular make and
+  // model.
+  J1939 = 2,
+
+  LEXUS_CT200H = 20,
+
+  KIA_SORENTO = 40,
+  KIA_SPORTAGE = 41,
+
+  AUDI_Q7 = 60,
+  AUDI_A8L = 61,
+
+  TESLA_MODEL_X = 80,
+  TESLA_MODEL_3 = 81,
+
+  HYUNDAI_ELANTRA = 100,
+
+  PEUGEOT_206 = 120,
+
+  MAN_TGX = 140,
+
+  FACTION = 160,
+
+  LINCOLN_MKZ = 180,
+
+  BMW_7 = 200,
+};
+
+/**
+ * @brief Get a human-friendly string name for the specified @ref VehicleModel.
+ * @ingroup config_and_ctrl_messages
+ *
+ * @param vehicle_model The desired vehicle model.
+ *
+ * @return The corresponding string name.
+ */
+inline const char* to_string(VehicleModel vehicle_model) {
+  switch (vehicle_model) {
+    case VehicleModel::UNKNOWN_VEHICLE:
+      return "UNKNOWN";
+    case VehicleModel::DATASPEED_CD4:
+      return "DATASPEED_CD4";
+    case VehicleModel::J1939:
+      return "J1939";
+    case VehicleModel::LEXUS_CT200H:
+      return "LEXUS_CT200H";
+    case VehicleModel::KIA_SORENTO:
+      return "KIA_SORENTO";
+    case VehicleModel::KIA_SPORTAGE:
+      return "KIA_SPORTAGE";
+    case VehicleModel::AUDI_Q7:
+      return "AUDI_Q7";
+    case VehicleModel::AUDI_A8L:
+      return "AUDI_A8L";
+    case VehicleModel::TESLA_MODEL_X:
+      return "TESLA_MODEL_X";
+    case VehicleModel::TESLA_MODEL_3:
+      return "TESLA_MODEL_3";
+    case VehicleModel::HYUNDAI_ELANTRA:
+      return "HYUNDAI_ELANTRA";
+    case VehicleModel::PEUGEOT_206:
+      return "PEUGEOT_206";
+    case VehicleModel::MAN_TGX:
+      return "MAN_TGX";
+    case VehicleModel::FACTION:
+      return "FACTION";
+    case VehicleModel::LINCOLN_MKZ:
+      return "LINCOLN_MKZ";
+    case VehicleModel::BMW_7:
+      return "BMW_7";
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+/**
+ * @brief @ref VehicleModel stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream,
+                                VehicleModel vehicle_model) {
+  stream << to_string(vehicle_model) << " (" << (int)vehicle_model << ")";
+  return stream;
+}
+
+/**
+ * @brief Information about the vehicle including model and dimensions.
+ * @ingroup config_and_ctrl_messages
+ */
+struct alignas(4) VehicleDetails {
+  VehicleModel vehicle_model = VehicleModel::UNKNOWN_VEHICLE;
+  uint8_t reserved[10] = {0};
+
+  /** The distance between the front axle and rear axle (in meters). */
+  float wheelbase_m = NAN;
+
+  /** The distance between the two front wheels (in meters). */
+  float front_track_width_m = NAN;
+
+  /** The distance between the two rear wheels (in meters). */
+  float rear_track_width_m = NAN;
+};
+
+/**
+ * @brief The type of vehicle/wheel speed measurements produced by the vehicle.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class WheelSensorType : uint8_t {
+  /** Wheel/vehicle speed data not available. */
+  NONE = 0,
+  /**
+   * Individual wheel rotation rates, reported as an encoder tick rate (in
+   * ticks/second). Will be scaled to meters/second using the specified scale
+   * factor.
+   */
+  TICK_RATE = 1,
+  /**
+   * Individual wheel rotational angles, reported as accumulated encoder
+   * ticks.
+   * */
+  TICKS = 2,
+  /** Individual wheel speeds, reported in meters/second. */
+  WHEEL_SPEED = 3,
+  /** A single value indicating the vehicle speed (in meters/second). */
+  VEHICLE_SPEED = 4,
+  /** A single wheel rotational angle, reported as accumulated encoder ticks. */
+  VEHICLE_TICKS = 5,
+};
+
+/**
+ * @brief Get a human-friendly string name for the specified @ref
+ *        WheelSensorType.
+ * @ingroup config_and_ctrl_messages
+ *
+ * @param wheel_sensor_type The desired wheel sensor type.
+ *
+ * @return The corresponding string name.
+ */
+inline const char* to_string(WheelSensorType wheel_sensor_type) {
+  switch (wheel_sensor_type) {
+    case WheelSensorType::NONE: {
+      return "None";
+    }
+    case WheelSensorType::TICK_RATE: {
+      return "Tick Rate";
+    }
+    case WheelSensorType::TICKS: {
+      return "Ticks";
+    }
+    case WheelSensorType::WHEEL_SPEED: {
+      return "Wheel Speed";
+    }
+    case WheelSensorType::VEHICLE_SPEED: {
+      return "Vehicle Speed";
+    }
+    case WheelSensorType::VEHICLE_TICKS: {
+      return "Vehicle Ticks";
+    }
+    default: {
+      return "None";
+    }
+  }
+}
+
+/**
+ * @brief @ref WheelSensorType stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream,
+                                WheelSensorType wheel_sensor_type) {
+  stream << to_string(wheel_sensor_type) << " (" << (int)wheel_sensor_type
+         << ")";
+  return stream;
+}
+
+/**
+ * @brief The type of vehicle/wheel speed measurements to be applied.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class AppliedSpeedType : uint8_t {
+  /** Speed data not applied to the system. */
+  NONE = 0,
+  /** Rear wheel speed data to be applied to the system (recommended). */
+  REAR_WHEELS = 1,
+  /** Front wheel speed data to be applied to the system. */
+  FRONT_WHEELS = 2,
+  /** Front and rear wheel speed data to be applied to the system. */
+  FRONT_AND_REAR_WHEELS = 3,
+  /** Individual vehicle speed to be applied to the system. */
+  VEHICLE_BODY = 4,
+};
+
+/**
+ * @brief Get a human-friendly string name for the specified @ref
+ *        AppliedSpeedType.
+ * @ingroup config_and_ctrl_messages
+ *
+ * @param applied_speed_type The desired applied speed type.
+ *
+ * @return The corresponding string name.
+ */
+inline const char* to_string(AppliedSpeedType applied_speed_type) {
+  switch (applied_speed_type) {
+    case AppliedSpeedType::NONE: {
+      return "None";
+    }
+    case AppliedSpeedType::REAR_WHEELS: {
+      return "Rear Wheels";
+    }
+    case AppliedSpeedType::FRONT_WHEELS: {
+      return "Front Wheels";
+    }
+    case AppliedSpeedType::FRONT_AND_REAR_WHEELS: {
+      return "Front and Rear Wheels";
+    }
+    case AppliedSpeedType::VEHICLE_BODY: {
+      return "Vehicle Body";
+    }
+    default: {
+      return "Unrecognized";
+    }
+  }
+}
+
+/**
+ * @brief @ref AppliedSpeedType stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream,
+                                AppliedSpeedType applied_speed_type) {
+  stream << to_string(applied_speed_type) << " (" << (int)applied_speed_type
+         << ")";
+  return stream;
+}
+
+/**
+ * @brief Indication of which of the vehicle's wheels are steered.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class SteeringType : uint8_t {
+  /** Steered wheels unknown. */
+  UNKNOWN = 0,
+  /** Front wheels are steered. */
+  FRONT = 1,
+  /** Front and rear wheels are steered. */
+  FRONT_AND_REAR = 2,
+};
+
+/**
+ * @brief Get a human-friendly string name for the specified @ref SteeringType.
+ * @ingroup config_and_ctrl_messages
+ *
+ * @param steering_type The desired steering type.
+ *
+ * @return The corresponding string name.
+ */
+inline const char* to_string(SteeringType steering_type) {
+  switch (steering_type) {
+    case SteeringType::UNKNOWN: {
+      return "Unknown Steering";
+    }
+    case SteeringType::FRONT: {
+      return "Front Steering";
+    }
+    case SteeringType::FRONT_AND_REAR: {
+      return "Front and Rear Steering";
+    }
+    default: {
+      return "Unrecognized";
+    }
+  }
+}
+
+/**
+ * @brief @ref SteeringType stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream,
+                                SteeringType steering_type) {
+  stream << to_string(steering_type) << " (" << (int)steering_type << ")";
+  return stream;
+}
+
+/**
+ * @brief Vehicle/wheel speed measurement configuration settings.
+ * @ingroup config_and_ctrl_messages
+ */
+struct alignas(4) WheelConfig {
+  /**
+   * The type of vehicle/wheel speed measurements produced by the vehicle.
+   */
+  WheelSensorType wheel_sensor_type = WheelSensorType::NONE;
+
+  /**
+   * The type of vehicle/wheel speed measurements to be applied to the
+   * navigation solution.
+   */
+  AppliedSpeedType applied_speed_type = AppliedSpeedType::REAR_WHEELS;
+
+  /** Indication of which of the vehicle's wheels are steered. */
+  SteeringType steering_type = SteeringType::UNKNOWN;
+
+  uint8_t reserved1[1] = {0};
+
+  /**
+   * The nominal rate at which wheel speed measurements will be provided (in
+   * seconds).
+   */
+  float wheel_update_interval_sec = NAN;
+
+  /**
+   * The nominal rate at which wheel tick measurements will be provided (in
+   * seconds).
+   */
+  float wheel_tick_output_interval_sec = NAN;
+
+  /**
+   * Ratio between angle of the steering wheel and the angle of the wheels on
+   * the ground.
+   */
+  float steering_ratio = NAN;
+
+  /**
+   * The scale factor to convert from wheel encoder ticks to distance (in
+   * meters/tick). Used for @ref WheelSensorType::TICKS and
+   * @ref WheelSensorType::TICK_RATE.
+   */
+  float wheel_ticks_to_m = NAN;
+
+  /**
+   * The maximum value (inclusive) before the wheel tick measurement will roll
+   * over.
+   *
+   * The rollover behavior depends on the value of @ref wheel_ticks_signed. For
+   * example, a maximum value of 10 will work as follows:
+   * - `wheel_ticks_signed == true`: [-11, 10]
+   * - `wheel_ticks_signed == false`: [0, 10]
+   *
+   * Signed values are assumed to be asymmetric, consistent with a typical 2's
+   * complement rollover.
+   */
+  uint32_t wheel_tick_max_value = 0;
+
+  /**
+   * `true` if the reported wheel tick measurements should be interpreted as
+   * signed integers, or `false` if they should be interpreted as unsigned
+   * integers.
+   *
+   * See @ref wheel_tick_max_value for details.
+   */
+  bool wheel_ticks_signed = false;
+
+  /**
+   * `true` if the wheel tick measurements increase by a positive amount when
+   * driving forward or backward. `false` if wheel tick measurements decrease
+   * when driving backward.
+   */
+  bool wheel_ticks_always_increase = true;
+
+  uint8_t reserved2[2] = {0};
+};
+
+/**
+ * @brief The signal edge to use when capturing a wheel tick voltage signal.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class TickMode : uint8_t {
+  /** Wheel tick capture disabled. */
+  OFF = 0,
+  /** Capture a wheel tick on the rising edge of the incoming pulse. */
+  RISING_EDGE = 1,
+  /** Capture a wheel tick on the falling edge of the incoming pulse. */
+  FALLING_EDGE = 2,
+};
+
+inline const char* to_string(TickMode tick_mode) {
+  switch (tick_mode) {
+    case TickMode::OFF:
+      return "OFF";
+    case TickMode::RISING_EDGE:
+      return "RISING_EDGE";
+    case TickMode::FALLING_EDGE:
+      return "FALLING_EDGE";
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+/**
+ * @brief @ref TickMode stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream, TickMode tick_mode) {
+  stream << to_string(tick_mode) << " (" << (int)tick_mode << ")";
+  return stream;
+}
+
+/**
+ * @brief The way to interpret an incoming voltage signal, used to indicate
+ *        direction of a hardware wheel tick pulse, if available.
+ * @ingroup config_and_ctrl_messages
+ */
+enum class TickDirection : uint8_t {
+  /** Wheel tick direction not provided. */
+  OFF = 0,
+  /**
+   * Assume vehicle is moving forward when direction signal voltage is high, and
+   * backward when direction signal is low.
+   */
+  FORWARD_ACTIVE_HIGH = 1,
+  /**
+   * Assume vehicle is moving forward when direction signal voltage is low, and
+   * backward when direction signal is high.
+   */
+  FORWARD_ACTIVE_LOW = 2,
+};
+
+inline const char* to_string(TickDirection tick_direction) {
+  switch (tick_direction) {
+    case TickDirection::OFF:
+      return "OFF";
+    case TickDirection::FORWARD_ACTIVE_HIGH:
+      return "FORWARD_ACTIVE_HIGH";
+    case TickDirection::FORWARD_ACTIVE_LOW:
+      return "FORWARD_ACTIVE_LOW";
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+/**
+ * @brief @ref TickDirection stream operator.
+ * @ingroup config_and_ctrl_messages
+ */
+inline std::ostream& operator<<(std::ostream& stream,
+                                TickDirection tick_direction) {
+  stream << to_string(tick_direction) << " (" << (int)tick_direction << ")";
+  return stream;
+}
+
+/**
+ * @brief Hardware tick configuration settings.
+ * @ingroup config_and_ctrl_messages
+ */
+struct alignas(4) HardwareTickConfig {
+  /**
+   * If enabled -- tick mode is not @ref TickMode::OFF -- the device will
+   * accumulate ticks received on the I/O pin, and use them as an indication of
+   * vehicle speed. If enabled, you must also specify @ref wheel_ticks_to_m to
+   * indicate the mapping of wheel tick encoder angle to tire circumference. All
+   * other wheel tick-related parameters such as tick capture rate, rollover
+   * value, etc. will be set internally.
+   *
+   * @warning
+   * Do not enable this feature if a wheel tick voltage signal is not present.
+   */
+  TickMode tick_mode = TickMode::OFF;
+
+  /**
+   * When direction is @ref TickDirection::OFF, the incoming ticks will be
+   * treated as unsigned, meaning the tick count will continue to increase in
+   * either direction of travel. If direction is not @ref TickDirection::OFF,
+   * a second direction I/O pin will be used to indicate the direction of
+   * travel and the accumulated tick count will increase/decrease accordingly.
+   */
+  TickDirection tick_direction = TickDirection::OFF;
+
+  uint8_t reserved1[2] = {0};
+
+  /**
+   * The scale factor to convert from wheel encoder ticks to distance (in
+   * meters/tick). Used for @ref WheelSensorType::TICKS and
+   * @ref WheelSensorType::TICK_RATE.
+   */
+  float wheel_ticks_to_m = NAN;
 };
 
 /** @} */

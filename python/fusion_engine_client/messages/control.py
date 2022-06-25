@@ -1,8 +1,7 @@
-from enum import IntEnum
-
 from construct import (Struct, Int64ul, Int16ul, Int8ul, Padding, this, Bytes, PaddedString)
 
 from ..utils.construct_utils import AutoEnum
+from ..utils.enum_utils import IntEnum
 from .defs import *
 
 
@@ -164,6 +163,8 @@ class ResetRequest(MessagePayload):
     # @{
     ## Restart the GNSS measurement engine.
     RESTART_GNSS_MEASUREMENT_ENGINE = 0x01000000
+    ## Reboot the navigation processor.
+    REBOOT_NAVIGATION_PROCESSOR = 0x02000000
     ## @}
 
     ##
@@ -184,7 +185,8 @@ class ResetRequest(MessagePayload):
     # - Position, velocity, orientation (@ref RESET_POSITION_DATA)
     # - Calibration data (@ref RESET_CALIBRATION_DATA)
     # - User configuration settings (@ref RESET_CONFIG)
-    # - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+    # - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+    # - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
     HOT_START = 0x000000FF
 
     ##
@@ -204,7 +206,8 @@ class ResetRequest(MessagePayload):
     #   compensation, etc.; @ref RESET_NAVIGATION_ENGINE_DATA)
     # - Calibration data (@ref RESET_CALIBRATION_DATA)
     # - User configuration settings (@ref RESET_CONFIG)
-    # - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+    # - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+    # - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
     WARM_START = 0x000001FF
 
     ##
@@ -218,13 +221,14 @@ class ResetRequest(MessagePayload):
     # - All runtime data (GNSS corrections (@ref RESET_GNSS_CORRECTIONS), etc.)
     # - Position, velocity, orientation (@ref RESET_POSITION_DATA)
     # - Fast IMU corrections (@ref RESET_FAST_IMU_CORRECTIONS)
-    # - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+    # - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
     #
     # Not reset:
     # - Training parameters (slowly estimated IMU corrections, temperature
     #   compensation, etc.; @ref RESET_NAVIGATION_ENGINE_DATA)
     # - Calibration data (@ref RESET_CALIBRATION_DATA)
     # - User configuration settings (@ref RESET_CONFIG)
+    # - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
     #
     # @note
     # To reset training or calibration data as well, set the @ref
@@ -233,9 +237,7 @@ class ResetRequest(MessagePayload):
 
     ##
     # Restart mask to set all persistent data, including calibration and user configuration, back to factory defaults.
-    #
-    # Note: Upper 8 bits reserved for future use (e.g., hardware reset).
-    FACTORY_RESET = 0x01FFFFFF
+    FACTORY_RESET = 0xFFFFFFFF
 
     ## @}
 
@@ -337,9 +339,6 @@ class EventNotificationMessage(MessagePayload):
         RESET = 1
         CONFIG_CHANGE = 2
 
-        def __str__(self):
-            return super().__str__().replace(self.__class__.__name__ + '.', '')
-
     EventNotificationConstruct = Struct(
         "action" / AutoEnum(Int8ul, Action),
         Padding(3),
@@ -377,3 +376,35 @@ class EventNotificationMessage(MessagePayload):
 
     def calcsize(self) -> int:
         return len(self.pack())
+
+
+class ShutdownRequest(MessagePayload):
+    """!
+    @brief Perform a device shutdown.
+    """
+    MESSAGE_TYPE = MessageType.SHUTDOWN_REQUEST
+    MESSAGE_VERSION = 0
+
+    ShutdownRequestConstruct = Struct(
+        "shutdown_flags" / Int64ul,
+        Padding(8),
+    )
+
+    def __init__(self, shutdown_flags = 0):
+        self.shutdown_flags = shutdown_flags
+
+    def pack(self, buffer: bytes = None, offset: int = 0, return_buffer: bool = True) -> (bytes, int):
+        values = vars(self)
+        packed_data = self.ShutdownRequestConstruct.build(values)
+        return PackedDataToBuffer(packed_data, buffer, offset, return_buffer)
+
+    def unpack(self, buffer: bytes, offset: int = 0) -> int:
+        parsed = self.ShutdownRequestConstruct.parse(buffer[offset:])
+        self.__dict__.update(parsed)
+        return parsed._io.tell()
+
+    def __str__(self):
+        return 'Shutdown Request [flags=0x%016x]' % self.shutdown_flags
+
+    def calcsize(self) -> int:
+        return self.ShutdownRequestConstruct.sizeof()

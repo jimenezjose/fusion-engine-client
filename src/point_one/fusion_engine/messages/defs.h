@@ -125,7 +125,7 @@ inline std::ostream& operator<<(std::ostream& stream, Response val) {
 enum class SolutionType : uint8_t {
   /** Invalid, no position available. */
   Invalid = 0,
-  /** Standalone GNSS fix, no correction data used. */
+  /** Standalone GNSS fix, no GNSS corrections data used. */
   AutonomousGPS = 1,
   /**
    * Differential GNSS pseudorange solution using a local RTK base station or
@@ -163,6 +163,7 @@ enum class MessageType : uint16_t {
   GNSS_SATELLITE = 10002, ///< @ref GNSSSatelliteMessage
   POSE_AUX = 10003, ///< @ref PoseAuxMessage
   CALIBRATION_STATUS = 10004, ///< @ref CalibrationStatusMessage
+  RELATIVE_ENU_POSITION = 10005, ///< @ref RelativeENUPositionMessage
 
   // Sensor measurement messages.
   IMU_MEASUREMENT = 11000, ///< @ref IMUMeasurement
@@ -178,6 +179,7 @@ enum class MessageType : uint16_t {
   RESET_REQUEST = 13002, ///< @ref ResetRequest
   VERSION_INFO = 13003, ///< @ref VersionInfoMessage
   EVENT_NOTIFICATION = 13004, ///< @ref EventNotificationMessage
+  SHUTDOWN_REQUEST = 13005, ///< @ref ShutdownRequest
 
   SET_CONFIG = 13100, ///< @ref SetConfigMessage
   GET_CONFIG = 13101, ///< @ref GetConfigMessage
@@ -393,6 +395,9 @@ inline const char* to_string(MessageType type) {
 
     case MessageType::EVENT_NOTIFICATION:
       return "Event Notification";
+
+    case MessageType::SHUTDOWN_REQUEST:
+      return "Shutdown Request";
 
     case MessageType::SET_CONFIG:
       return "Set Configuration Parameter";

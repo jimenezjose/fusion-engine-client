@@ -160,6 +160,8 @@ struct alignas(4) ResetRequest : public MessagePayload {
    */
   /** Restart the GNSS measurement engine. */
   static constexpr uint32_t RESTART_GNSS_MEASUREMENT_ENGINE = 0x01000000;
+  /** Reboot the navigation processor. */
+  static constexpr uint32_t REBOOT_NAVIGATION_PROCESSOR = 0x02000000;
   /** @} */
 
   /**
@@ -183,7 +185,8 @@ struct alignas(4) ResetRequest : public MessagePayload {
    *   compensation, etc.; @ref RESET_NAVIGATION_ENGINE_DATA)
    * - Calibration data (@ref RESET_CALIBRATION_DATA)
    * - User configuration settings (@ref RESET_CONFIG)
-   * - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+   * - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+   * - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
    */
   static constexpr uint32_t HOT_START = 0x000000FF;
 
@@ -204,7 +207,8 @@ struct alignas(4) ResetRequest : public MessagePayload {
    *   compensation, etc.; @ref RESET_NAVIGATION_ENGINE_DATA)
    * - Calibration data (@ref RESET_CALIBRATION_DATA)
    * - User configuration settings (@ref RESET_CONFIG)
-   * - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+   * - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+   * - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
    */
   static constexpr uint32_t WARM_START = 0x000001FF;
 
@@ -219,13 +223,14 @@ struct alignas(4) ResetRequest : public MessagePayload {
    * - All runtime data (GNSS corrections (@ref RESET_GNSS_CORRECTIONS), etc.)
    * - Position, velocity, orientation (@ref RESET_POSITION_DATA)
    * - Fast IMU corrections (@ref RESET_FAST_IMU_CORRECTIONS)
-   * - GNSS Measurement engine hardware (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
+   * - GNSS measurement engine (@ref RESTART_GNSS_MEASUREMENT_ENGINE)
    *
    * Not reset:
    * - Training parameters (slowly estimated IMU corrections, temperature
    *   compensation, etc.; @ref RESET_NAVIGATION_ENGINE_DATA)
    * - Calibration data (@ref RESET_CALIBRATION_DATA)
    * - User configuration settings (@ref RESET_CONFIG)
+   * - Reboot navigation processor (@ref REBOOT_NAVIGATION_PROCESSOR)
    *
    * @note
    * To reset training or calibration data as well, set the @ref
@@ -236,10 +241,8 @@ struct alignas(4) ResetRequest : public MessagePayload {
   /**
    * Restart mask to set all persistent data, including calibration and user
    * configuration, back to factory defaults.
-   *
-   * Note: Upper 8 bits reserved for future use (e.g., hardware reset).
    */
-  static constexpr uint32_t FACTORY_RESET = 0x01FFFFFF;
+  static constexpr uint32_t FACTORY_RESET = 0xFFFFFFFF;
   /** @} */
 
   /** Bit mask of functionality to reset. */
@@ -357,6 +360,19 @@ struct alignas(4) EventNotificationMessage : public MessagePayload {
    * This is used for populating string describing the event, where applicable.
    */
   char* event_description[0];
+};
+
+/**
+ * @brief Perform a device shutdown (@ref
+ *        MessageType::SHUTDOWN_REQUEST, version 1.0).
+ * @ingroup config_and_ctrl_messages
+ */
+struct alignas(4) ShutdownRequest : public MessagePayload {
+  static constexpr MessageType MESSAGE_TYPE = MessageType::SHUTDOWN_REQUEST;
+  static constexpr uint8_t MESSAGE_VERSION = 0;
+  /** A bitmask of flags associated with the event. */
+  uint64_t shutdown_flags = 0;
+  uint8_t reserved1[8] = {0};
 };
 
 #pragma pack(pop)

@@ -26,7 +26,7 @@ from .attitude import get_enu_rotation_matrix
 from .file_reader import FileReader
 from ..utils import trace
 from ..utils.argument_parser import ArgumentParser
-from ..utils.log import locate_log
+from ..utils.log import locate_log, DEFAULT_LOG_BASE_DIR
 _logger = logging.getLogger('point_one.fusion_engine.analysis.analyzer')
 
 
@@ -134,12 +134,17 @@ class Analyzer(object):
         if self.output_dir is None:
             return
 
-        figure = go.Figure()
-        figure['layout'].update(title='Device Time vs Relative Time', showlegend=False)
-        figure['layout']['xaxis1'].update(title="Relative Time (sec)")
+        # Setup the figure.
+        figure = make_subplots(rows=2, cols=1, print_grid=False, shared_xaxes=True,
+                               subplot_titles=['Device Time vs Relative Time', 'Delta-Time'])
+
+        figure['layout'].update(showlegend=False)
+        for i in range(2):
+            figure['layout']['xaxis%d' % (i + 1)].update(title="Relative Time (sec)", showticklabels=True)
         figure['layout']['yaxis1'].update(title="Absolute Time",
                                           ticktext=['P1/GPS Time', 'System Time'],
                                           tickvals=[1, 2])
+        figure['layout']['yaxis2'].update(title="Delta-Time (sec)", rangemode="tozero")
 
         # Read the pose data to get P1 and GPS timestamps.
         result = self.reader.read(message_types=[PoseMessage], **self.params)
@@ -147,6 +152,9 @@ class Analyzer(object):
 
         if len(pose_data.p1_time) > 0:
             time = pose_data.p1_time - float(self.t0)
+
+            dp1_time = np.diff(time, prepend=np.nan)
+            dp1_time = np.round(dp1_time * 1e3) * 1e-3
 
             # plotly starts to struggle with > 2 hours of data and won't display mouseover text, so decimate if
             # necessary.
@@ -158,9 +166,10 @@ class Analyzer(object):
 
                 time = time[idx]
                 p1_time = pose_data.p1_time[idx]
+                dp1_time = dp1_time[idx]
                 gps_time = pose_data.gps_time[idx]
 
-                figure['layout'].update(title=figure.layout.title.text + "<br>Decimated %dx" % step)
+                figure.layout.annotations[0].text += "<br>Decimated %dx" % step
             else:
                 p1_time = pose_data.p1_time
                 gps_time = pose_data.gps_time
@@ -178,7 +187,12 @@ class Analyzer(object):
 
             text = ['P1: %.3f sec<br>%s' % (p, gps_sec_to_string(g)) for p, g in zip(p1_time, gps_time)]
             figure.add_trace(go.Scattergl(x=time, y=np.full_like(time, 1), name='P1/GPS Time', text=text,
-                                          mode='markers'))
+                                          mode='markers'),
+                             1, 1)
+
+            figure.add_trace(go.Scattergl(x=time, y=dp1_time, name='P1/GPS Time', text=text,
+                                          mode='markers'),
+                             2, 1)
 
         # Read system timestamps from event notifications, if present.
         result = self.reader.read(message_types=[EventNotificationMessage], **self.params)
@@ -204,7 +218,8 @@ class Analyzer(object):
 
             text = ['System: %.3f sec' % t for t in system_time_sec]
             figure.add_trace(go.Scattergl(x=time, y=np.full_like(time, 2), name='System Time', text=text,
-                                          mode='markers'))
+                                          mode='markers'),
+                             1, 1)
 
         self._add_figure(name="time_scale", figure=figure, title="Time Scale")
 
@@ -239,9 +254,8 @@ class Analyzer(object):
                                                'Attitude Std', 'ENU Position Std', 'Velocity Std'])
 
         figure['layout'].update(showlegend=True)
-        figure['layout']['xaxis'].update(title="Time (sec)")
         for i in range(6):
-            figure['layout']['xaxis%d' % (i + 1)].update(showticklabels=True)
+            figure['layout']['xaxis%d' % (i + 1)].update(title="Time (sec)", showticklabels=True)
         figure['layout']['yaxis1'].update(title="Degrees")
         figure['layout']['yaxis2'].update(title="Meters")
         figure['layout']['yaxis3'].update(title="Meters/Second")
@@ -347,9 +361,8 @@ class Analyzer(object):
                                specs=[[{"secondary_y": True}], [{}], [{}], [{}]])
 
         figure['layout'].update(showlegend=True)
-        figure['layout']['xaxis'].update(title="Time (sec)")
         for i in range(4):
-            figure['layout']['xaxis%d' % (i + 1)].update(showticklabels=True)
+            figure['layout']['xaxis%d' % (i + 1)].update(title="Time (sec)", showticklabels=True)
         figure['layout']['yaxis1'].update(title="Percent Complete", range=[0, 100])
         figure['layout']['yaxis2'].update(ticktext=['%s' % e.name for e in CalibrationStage],
                                           tickvals=list(range(len(stage_map))))
@@ -449,9 +462,102 @@ class Analyzer(object):
 
         self._add_figure(name="solution_type", figure=figure, title="Solution Type")
 
-    def plot_topocentric(self):
+    def _plot_displacement(self, source, time, solution_type, displacement_enu_m, std_enu_m):
         """!
-        @brief Generate a topocentric (top-down) plot of position displacement.
+        @brief Generate a topocentric (top-down) plot of position displacement, as well as plot of displacement over
+               time.
+        """
+        if self.output_dir is None:
+            return
+
+        # Setup the figure.
+        topo_figure = make_subplots(rows=1, cols=1, print_grid=False, shared_xaxes=False,
+                                    subplot_titles=['Displacement'])
+        topo_figure['layout']['xaxis1'].update(title="East (m)")
+        topo_figure['layout']['yaxis1'].update(title="North (m)")
+
+        time_figure = make_subplots(rows=4, cols=1, print_grid=False, shared_xaxes=True,
+                                    subplot_titles=['3D', 'North', 'East', 'Up'])
+        time_figure['layout'].update(showlegend=True)
+        for i in range(4):
+            time_figure['layout']['xaxis%d' % (i + 1)].update(title="Time (sec)", showticklabels=True)
+        time_figure['layout']['yaxis1'].update(title="Displacement (m)")
+        time_figure['layout']['yaxis2'].update(title="Displacement (m)")
+        time_figure['layout']['yaxis3'].update(title="Displacement (m)")
+        time_figure['layout']['yaxis4'].update(title="Displacement (m)")
+
+        # Remove invalid solutions.
+        valid_idx = np.logical_and(~np.isnan(time), solution_type != SolutionType.Invalid)
+        if not np.any(valid_idx):
+            self.logger.info('No valid position solutions detected. Skipping displacement plots.')
+            return
+
+        # Add statistics to the figure title.
+        format = 'Mean: %(mean).2f m, Median: %(median).2f m, Min: %(min).2f m, Max: %(max).2f m, Std Dev: %(std).2f m'
+        displacement_3d_m = np.linalg.norm(displacement_enu_m, axis=0)
+        extra_text = '[All] ' + format % {
+            'mean': np.mean(displacement_3d_m),
+            'median': np.median(displacement_3d_m),
+            'min': np.min(displacement_3d_m),
+            'max': np.max(displacement_3d_m),
+            'std': np.std(displacement_3d_m),
+        }
+
+        idx = solution_type == SolutionType.RTKFixed
+        if np.any(idx):
+            displacement_3d_m = np.linalg.norm(displacement_enu_m[:, idx], axis=0)
+            extra_text += '<br>[Fixed] ' + format % {
+                'mean': np.mean(displacement_3d_m),
+                'median': np.median(displacement_3d_m),
+                'min': np.min(displacement_3d_m),
+                'max': np.max(displacement_3d_m),
+                'std': np.std(displacement_3d_m),
+            }
+
+        topo_figure.update_layout(title_text=extra_text)
+        time_figure.update_layout(title_text=extra_text)
+
+        # Plot the data.
+        def _plot_data(name, idx, marker_style=None):
+            style = {'mode': 'markers', 'marker': {'size': 8}, 'showlegend': True, 'legendgroup': name}
+            if marker_style is not None:
+                style['marker'].update(marker_style)
+
+            if np.any(idx):
+                text = ["Time: %.3f sec (%.3f sec)<br>Delta (ENU): (%.2f, %.2f, %.2f) m" \
+                        "<br>Std (ENU): (%.2f, %.2f, %.2f) m" %
+                        (t, t + float(self.t0), *delta, *std)
+                        for t, delta, std in zip(time[idx], displacement_enu_m[:, idx].T, std_enu_m[:, idx].T)]
+                topo_figure.add_trace(go.Scattergl(x=displacement_enu_m[0, idx], y=displacement_enu_m[1, idx],
+                                                   name=name, text=text, **style), 1, 1)
+
+                time_figure.add_trace(go.Scattergl(x=time[idx], y=np.linalg.norm(displacement_enu_m[:, idx], axis=0),
+                                                   name=name, text=text, **style), 1, 1)
+                style['showlegend'] = False
+                time_figure.add_trace(go.Scattergl(x=time[idx], y=displacement_enu_m[0, idx], name=name,
+                                                   text=text, **style), 2, 1)
+                time_figure.add_trace(go.Scattergl(x=time[idx], y=displacement_enu_m[1, idx], name=name,
+                                                   text=text, **style), 3, 1)
+                time_figure.add_trace(go.Scattergl(x=time[idx], y=displacement_enu_m[2, idx], name=name,
+                                                   text=text, **style), 4, 1)
+            else:
+                # If there's no data, draw a dummy trace so it shows up in the legend anyway.
+                topo_figure.add_trace(go.Scattergl(x=[np.nan], y=[np.nan], name=name, visible='legendonly', **style),
+                                      1, 1)
+                time_figure.add_trace(go.Scattergl(x=[np.nan], y=[np.nan], name=name, visible='legendonly', **style),
+                                      1, 1)
+
+        for type, info in _SOLUTION_TYPE_MAP.items():
+            _plot_data(info.name, solution_type == type, marker_style=info.style)
+
+        name = source.replace(' ', '_').lower()
+        self._add_figure(name=f"{name}_top_down", figure=topo_figure, title=f"{source}: Top-Down (Topocentric)")
+        self._add_figure(name=f"{name}_displacement", figure=time_figure, title=f"{source}: vs. Time")
+
+    def plot_pose_displacement(self):
+        """!
+        @brief Generate a topocentric (top-down) plot of position displacement, as well as plot of displacement over
+               time.
         """
         if self.output_dir is None:
             return
@@ -461,18 +567,13 @@ class Analyzer(object):
         pose_data = result[PoseMessage.MESSAGE_TYPE]
 
         if len(pose_data.p1_time) == 0:
-            self.logger.info('No pose data available. Skipping topocentric plot.')
+            self.logger.info('No pose data available. Skipping displacement plots.')
             return
-
-        # Setup the figure.
-        figure = make_subplots(rows=1, cols=1, print_grid=False, shared_xaxes=True, subplot_titles=['Displacement'])
-        figure['layout']['xaxis'].update(title="East (m)")
-        figure['layout']['xaxis'].update(title="North (m)")
 
         # Remove invalid solutions.
         valid_idx = np.logical_and(~np.isnan(pose_data.p1_time), pose_data.solution_type != SolutionType.Invalid)
         if not np.any(valid_idx):
-            self.logger.info('No valid position solutions detected.')
+            self.logger.info('No valid position solutions detected. Skipping displacement plots.')
             return
 
         time = pose_data.p1_time[valid_idx] - float(self.t0)
@@ -482,33 +583,43 @@ class Analyzer(object):
 
         # Convert to ENU displacement with respect to the median position (we use median instead of centroid just in
         # case there are one or two huge outliers).
-        position_ecef_m = np.array(geodetic2ecef(lat=lla_deg[0, :], lon=lla_deg[1, :], alt=lla_deg[0, :], deg=True))
+        position_ecef_m = np.array(geodetic2ecef(lat=lla_deg[0, :], lon=lla_deg[1, :], alt=lla_deg[2, :], deg=True))
         center_ecef_m = np.median(position_ecef_m, axis=1)
         displacement_ecef_m = position_ecef_m - center_ecef_m.reshape(3, 1)
         c_enu_ecef = get_enu_rotation_matrix(*lla_deg[0:2, 0], deg=True)
         displacement_enu_m = c_enu_ecef.dot(displacement_ecef_m)
 
-        # Plot the data.
-        def _plot_data(name, idx, marker_style=None):
-            style = {'mode': 'markers', 'marker': {'size': 8}, 'showlegend': True}
-            if marker_style is not None:
-                style['marker'].update(marker_style)
+        self._plot_displacement('Pose Displacement', time, solution_type, displacement_enu_m, std_enu_m)
 
-            if np.any(idx):
-                text = ["Time: %.3f sec (%.3f sec)<br>Delta (ENU): (%.2f, %.2f, %.2f) m" \
-                        "<br>Std (ENU): (%.2f, %.2f, %.2f) m" %
-                        (t, t + float(self.t0), *delta, *std)
-                        for t, delta, std in zip(time[idx], displacement_enu_m[:, idx].T, std_enu_m[:, idx].T)]
-                figure.add_trace(go.Scattergl(x=displacement_enu_m[0, idx], y=displacement_enu_m[1, idx], name=name,
-                                              text=text, **style), 1, 1)
-            else:
-                # If there's no data, draw a dummy trace so it shows up in the legend anyway.
-                figure.add_trace(go.Scattergl(x=[np.nan], y=[np.nan], name=name, visible='legendonly', **style), 1, 1)
+    def plot_relative_position_to_base_station(self):
+        """!
+        @brief Generate a topocentric (top-down) plot of relative position vs base station, as well as plot of relative
+               position over time.
+        """
+        if self.output_dir is None:
+            return
 
-        for type, info in _SOLUTION_TYPE_MAP.items():
-            _plot_data(info.name, solution_type == type, marker_style=info.style)
+        # Read the pose data.
+        result = self.reader.read(message_types=[RelativeENUPositionMessage], **self.params)
+        relative_position_data = result[RelativeENUPositionMessage.MESSAGE_TYPE]
 
-        self._add_figure(name="top_down", figure=figure, title="Top-Down Displacement (Topocentric)")
+        if len(relative_position_data.p1_time) == 0:
+            self.logger.info('No relative ENU data available. Skipping relative position vs base station plots.')
+            return
+
+        # Remove invalid solutions.
+        valid_idx = ~np.isnan(relative_position_data.relative_position_enu_m[0, :])
+
+        if not np.any(valid_idx):
+            self.logger.info('No valid position solutions detected. Skipping relative position vs base station plots.')
+            return
+
+        time = relative_position_data.p1_time[valid_idx] - float(self.t0)
+        solution_type = relative_position_data.solution_type[valid_idx]
+        displacement_enu_m = relative_position_data.relative_position_enu_m[:, valid_idx]
+        std_enu_m = relative_position_data.position_std_enu_m[:, valid_idx]
+
+        self._plot_displacement('Relative Position vs Base Station', time, solution_type, displacement_enu_m, std_enu_m)
 
     def plot_map(self, mapbox_token):
         """!
@@ -607,9 +718,8 @@ class Analyzer(object):
                                subplot_titles=['Acceleration', 'Gyro'])
 
         figure['layout'].update(showlegend=True)
-        figure['layout']['xaxis'].update(title="Time (sec)")
-        figure['layout']['xaxis1'].update(showticklabels=True)
-        figure['layout']['xaxis2'].update(showticklabels=True)
+        figure['layout']['xaxis1'].update(title="Time (sec)", showticklabels=True)
+        figure['layout']['xaxis2'].update(title="Time (sec)", showticklabels=True)
         figure['layout']['yaxis1'].update(title="Acceleration (m/s^2)")
         figure['layout']['yaxis1'].update(title="Rotation Rate (rad/s)")
 
@@ -681,13 +791,16 @@ class Analyzer(object):
                             'Could not generate a trajectory map. Please specify --mapbox-token or set the ' \
                             'MAPBOX_ACCESS_TOKEN environment variable.</p>\n'
 
+        index_path = os.path.join(self.output_dir, self.prefix + 'index.html')
+        index_dir = os.path.dirname(index_path)
+
         links = ''
         title_to_name = {e['title']: n for n, e in self.plots.items()}
         titles = sorted(title_to_name.keys())
         for title in titles:
             name = title_to_name[title]
             entry = self.plots[name]
-            link = '<br><a href="%s" target="_blank">%s</a>' % (os.path.relpath(entry['path'], self.output_dir), title)
+            link = '<br><a href="%s" target="_blank">%s</a>' % (os.path.relpath(entry['path'], index_dir), title)
             links += link
 
         index_html = _page_template % {
@@ -695,7 +808,6 @@ class Analyzer(object):
             'body': links + '\n<pre>' + self.summary.replace('\n', '<br>') + '</pre>'
         }
 
-        index_path = os.path.join(self.output_dir, self.prefix + 'index.html')
         with open(index_path, 'w') as f:
             self.logger.info('Creating %s...' % index_path)
             f.write(index_html)
@@ -726,7 +838,10 @@ class Analyzer(object):
 
         types = list(solution_type_count.keys())
         counts = ['%d' % c for c in solution_type_count.values()]
-        percents = ['%.1f%%' % (float(c) / num_pose_messages * 100.0) for c in solution_type_count.values()]
+        if num_pose_messages == 0:
+            percents = ['N/A' for c in solution_type_count.values()]
+        else:
+            percents = ['%.1f%%' % (float(c) / num_pose_messages * 100.0) for c in solution_type_count.values()]
 
         types.append(None)
         counts.append(None)
@@ -761,8 +876,7 @@ class Analyzer(object):
         if len(result[VersionInfoMessage.MESSAGE_TYPE].messages) != 0:
             version = result[VersionInfoMessage.MESSAGE_TYPE].messages[-1]
             version_types = {'fw': 'Firmware', 'engine': 'FusionEngine', 'hw': 'Hardware', 'rx': 'GNSS Receiver'}
-            # Strip 'b' from byte string conversion
-            version_values = [str(vars(version)[k + '_version_str'])[1:] for k in version_types.keys()]
+            version_values = [str(vars(version)[k + '_version_str']) for k in version_types.keys()]
             version_table = _data_to_table(['Type', 'Version'], [list(version_types.values()), version_values])
         else:
             version_table = 'No version information.'
@@ -885,12 +999,13 @@ Load and display information stored in a FusionEngine binary file.
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Print verbose/trace debugging messages.")
 
-    parser.add_argument('--log-base-dir', metavar='DIR', default='/logs',
+    parser.add_argument('--log-base-dir', metavar='DIR', default=DEFAULT_LOG_BASE_DIR,
                         help="The base directory containing FusionEngine logs to be searched if a log pattern is "
                              "specified.")
     parser.add_argument('log',
                         help="The log to be read. May be one of:\n"
-                             "- The path to a .p1log file\n"
+                             "- The path to a .p1log file or a file containing FusionEngine messages and other "
+                             "content\n"
                              "- The path to a FusionEngine log directory\n"
                              "- A pattern matching a FusionEngine log directory under the specified base directory "
                              "(see find_fusion_engine_log() and --log-base-dir)")
@@ -955,7 +1070,8 @@ Load and display information stored in a FusionEngine binary file.
     analyzer.plot_time_scale()
     analyzer.plot_solution_type()
     analyzer.plot_pose()
-    analyzer.plot_topocentric()
+    analyzer.plot_pose_displacement()
+    analyzer.plot_relative_position_to_base_station()
     analyzer.plot_map(mapbox_token=options.mapbox_token)
     analyzer.plot_calibration()
 
